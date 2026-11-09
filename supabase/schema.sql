@@ -319,8 +319,14 @@ end; $$;
 revoke all on function public.accept_workspace_invite(uuid) from public,anon;
 grant execute on function public.accept_workspace_invite(uuid) to authenticated;
 
+create or replace function private.is_workspace_admin(p_workspace_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $
+ select exists(select 1 from public.workspace_members wm where wm.workspace_id=p_workspace_id and wm.user_id=(select auth.uid()) and wm.role in ('owner','admin'));
+$;
+revoke all on function private.is_workspace_admin(uuid) from public,anon;
+grant execute on function private.is_workspace_admin(uuid) to authenticated;
 drop policy if exists workspace_members_select_owner_admin on public.workspace_members;
 create policy workspace_members_select_owner_admin on public.workspace_members for select to authenticated using (
- exists(select 1 from public.workspace_members mine where mine.workspace_id=workspace_id and mine.user_id=(select auth.uid()) and mine.role in ('owner','admin'))
+ private.is_workspace_admin(workspace_id)
  or exists(select 1 from public.workspaces w where w.id=workspace_id and w.owner_id=(select auth.uid()))
 );
