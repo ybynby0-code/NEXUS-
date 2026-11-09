@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
 
 type Section = 'messages' | 'community' | 'meetings' | 'files';
@@ -10,7 +12,7 @@ const initialMessages: ChatMessage[] = [
   { id:3, name:'NEXUS AI', initials:'N', color:'green', time:'오전 10:46', text:'현재 화면은 프론트엔드 프로토타입입니다. 계정·실시간 동기화·AI API는 아직 연결되지 않았습니다.' },
 ];
 
-export default function App() {
+function WorkspaceApp() {
   const [section,setSection] = useState<Section>('messages');
   const [activeChannel,setActiveChannel] = useState('general');
   const [channels,setChannels] = useState(initialChannels);
@@ -139,3 +141,69 @@ export default function App() {
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
 }
+
+
+function AuthGate() {
+  const [session,setSession] = useState<any>(null);
+  const [loading,setLoading] = useState(true);
+  const [mode,setMode] = useState<'signin'|'signup'>('signin');
+  const [email,setEmail] = useState('');
+  const [password,setPassword] = useState('');
+  const [displayName,setDisplayName] = useState('');
+  const [error,setError] = useState('');
+  const [busy,setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return; }
+    supabase.auth.getSession().then(({data}) => {
+      setSession(data.session);
+      setLoading(false);
+    });
+    const {data:{subscription}} = supabase.auth.onAuthStateChange((_event,next) => {
+      setSession(next);
+      setLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  },[]);
+
+  const submit = async (event:FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+    setBusy(true); setError('');
+    try {
+      if (mode==='signup') {
+        const {data,error:authError} = await supabase.auth.signUp({
+          email:email.trim(),
+          password,
+          options:{data:{display_name:displayName.trim() || email.split('@')[0]}}
+        });
+        if (authError) throw authError;
+        if (!data.session) setError('가입 요청이 완료됐습니다. 이메일 인증 후 로그인해 주세요.');
+      } else {
+        const {error:authError} = await supabase.auth.signInWithPassword({email:email.trim(),password});
+        if (authError) throw authError;
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '인증 중 오류가 발생했습니다.');
+    } finally { setBusy(false); }
+  };
+
+  if (loading) return <div className="auth-screen"><div className="auth-card">NEXUS 연결 확인 중...</div></div>;
+  if (!isSupabaseConfigured || !supabase) return <div className="auth-screen"><div className="auth-card"><div className="brand-mark">N<span>.</span></div><h1>서버 설정이 필요합니다</h1><p>Supabase 연결 정보를 확인할 수 없습니다.</p></div></div>;
+  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={submit}>
+    <div className="brand-mark">N<span>.</span></div>
+    <div className="eyebrow">YOUR CONNECTED WORKSPACE</div>
+    <h1>{mode==='signin'?'NEXUS에 로그인':'NEXUS 계정 만들기'}</h1>
+    <p>계정으로 로그인하면 실제 서버 연결 기능을 사용할 수 있습니다.</p>
+    {mode==='signup'&&<label>표시 이름<input required value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="표시 이름"/></label>}
+    <label>이메일<input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label>
+    <label>비밀번호<input required type="password" minLength={6} autoComplete={mode==='signin'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="6자 이상"/></label>
+    {error&&<div className="auth-error">{error}</div>}
+    <button className="primary-action auth-submit" disabled={busy}>{busy?'처리 중...':mode==='signin'?'로그인':'가입하기'}</button>
+    <button type="button" className="auth-switch" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('')}}>{mode==='signin'?'계정이 없으신가요? 회원가입':'이미 계정이 있으신가요? 로그인'}</button>
+    <small>이메일 인증 설정에 따라 가입 후 확인 메일이 발송될 수 있습니다.</small>
+  </form></div>;
+  return <WorkspaceApp/>;
+}
+
+export default function App() { return <AuthGate/>; }
