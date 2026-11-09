@@ -42,8 +42,10 @@ function WorkspaceApp() {
   const [notificationsOpen,setNotificationsOpen] = useState(false);
   const [channelDialog,setChannelDialog] = useState(false);
   const [channelDraft,setChannelDraft] = useState('');
-  const [members,setMembers] = useState(['Mina','Jun','Alex','Sora','You']);
+  const [members,setMembers] = useState<any[]>([]);
   const [inviteDraft,setInviteDraft] = useState('');
+  const [workspaceInvites,setWorkspaceInvites] = useState<any[]>([]);
+  const [inviteBusy,setInviteBusy] = useState(false);
   const [meetingCreated,setMeetingCreated] = useState(false);
   const [files,setFiles] = useState<any[]>([]);
   const [filesBusy,setFilesBusy] = useState(false);
@@ -267,10 +269,40 @@ function WorkspaceApp() {
     if(error){notify('채널 생성 실패: '+error.message);return;}
     setChannels(v=>[...v,name]);setChannelIds(v=>({...v,[name]:data.id}));setActiveChannel(name);setSection('messages');setChannelDraft('');setChannelDialog(false);notify('#'+name+' 채널을 생성했습니다.');
   };
-  const addMember=()=>{
-    const name=inviteDraft.trim();if(!name)return;
-    if(members.includes(name)){notify('이미 멤버 목록에 있습니다.');return}
-    setMembers(v=>[...v,name]);setInviteDraft('');notify(name+' 님을 데모 멤버로 추가했습니다.');
+  const loadWorkspacePeople=async()=>{
+    if(!supabase||!workspaceId)return;
+    const [memberResult,inviteResult]=await Promise.all([
+      supabase.from('workspace_members').select('user_id,role,joined_at').eq('workspace_id',workspaceId),
+      supabase.from('workspace_invites').select('id,email,status,expires_at,created_at,workspace_id').order('created_at',{ascending:false}).limit(100)
+    ]);
+    if(memberResult.error){notify('멤버 조회 실패: '+memberResult.error.message);return;}
+    const ids=(memberResult.data||[]).map((m:any)=>m.user_id);
+    const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url').in('id',ids):{data:[]};
+    const byId:Record<string,any>={};(profiles||[]).forEach((p:any)=>byId[p.id]=p);
+    setMembers((memberResult.data||[]).map((m:any)=>({...m,person:byId[m.user_id]})));
+    if(inviteResult.error){notify('초대 목록 조회 실패: '+inviteResult.error.message);return;}
+    setWorkspaceInvites(inviteResult.data||[]);
+  };
+  useEffect(()=>{if(dbReady&&workspaceId)loadWorkspacePeople()},[dbReady,workspaceId]);
+  const addMember=async()=>{
+    const email=inviteDraft.trim().toLowerCase();
+    if(!email||!/^\S+@\S+\.\S+$/.test(email)){notify('올바른 이메일 주소를 입력해 주세요.');return;}
+    if(!supabase||!workspaceId||inviteBusy)return;
+    setInviteBusy(true);
+    const {data,error}=await supabase.functions.invoke('invite-workspace-member',{body:{workspace_id:workspaceId,email}});
+    setInviteBusy(false);
+    if(error||!data?.ok){notify('초대 실패: '+(data?.error||error?.message||'서버 오류'));return;}
+    setInviteDraft('');
+    notify(data.emailSent?'초대 이메일을 발송했습니다.':'초대는 저장됐지만 이메일은 발송되지 않았습니다. 기존 계정은 초대 목록에서 수락할 수 있습니다.');
+    await loadWorkspacePeople();
+  };
+  const acceptWorkspaceInvite=async(inviteId:string)=>{
+    if(!supabase)return;
+    const {data,error}=await supabase.rpc('accept_workspace_invite',{p_invite_id:inviteId});
+    if(error){notify('초대 수락 실패: '+error.message);return;}
+    notify('워크스페이스에 참여했습니다.');
+    await loadWorkspacePeople();
+    if(data?.workspace_id&&!workspaceId){setWorkspaceId(data.workspace_id);}
   };
   const loadWorkspaceFiles=async()=>{
     if(!supabase||!workspaceId)return;
@@ -377,6 +409,21 @@ function WorkspaceApp() {
         </div>
       </section>:section==='community'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">PEOPLE & COMMUNITY</div><h1>친구</h1><p>사용자를 검색하고 친구 요청을 관리합니다.</p></div></div>
+        <div className="section-card">
+          <div className="card-title"><Users size={18}/>워크스페이스 멤버 <span>{members.length}명</span></div>
+          {members.map(m=><div className="member-row" key={m.user_id}><div className="avatar violet">{(m.person?.display_name||'U').slice(0,1)}</div><div><strong>{m.person?.display_name||'사용자'}</strong><small>{m.role==='owner'?'소유자':m.role==='admin'?'관리자':'멤버'}</small></div></div>)}
+        </div>
+        <div className="section-card">
+          <div className="card-title"><UserPlus size={18}/>이메일로 워크스페이스 초대</div>
+          <div className="invite-controls"><input type="email" value={inviteDraft} onChange={e=>setInviteDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addMember()} placeholder="name@example.com"/><button className="primary-action" disabled={inviteBusy||!dbReady} onClick={addMember}>{inviteBusy?'초대 중...':'초대 보내기'}</button></div>
+          <p className="settings-note">워크스페이스 소유자와 관리자는 이메일로 새 사용자를 초대할 수 있습니다. 기존 계정은 동일한 이메일로 로그인한 뒤 초대를 수락할 수 있습니다.</p>
+          {workspaceInvites.filter(i=>i.workspace_id===workspaceId).map(i=><div className="member-row" key={i.id}><div><strong>{i.email}</strong><small>{i.status==='pending'?'대기 중':i.status==='accepted'?'수락됨':i.status==='expired'?'만료됨':'취소됨'} · 만료 {new Date(i.expires_at).toLocaleDateString('ko-KR')}</small></div></div>)}
+        </div>
+        <div className="section-card">
+          <div className="card-title"><UserPlus size={18}/>내게 온 워크스페이스 초대</div>
+          {workspaceInvites.filter(i=>i.status==='pending'&&i.email.toLowerCase()===String(currentUser?.email||'').toLowerCase()).map(i=><div className="member-row" key={i.id}><div><strong>워크스페이스 초대</strong><small>7일 이내 수락해 주세요.</small></div><button className="primary-action" onClick={()=>acceptWorkspaceInvite(i.id)}>수락</button></div>)}
+          {!workspaceInvites.some(i=>i.status==='pending'&&i.email.toLowerCase()===String(currentUser?.email||'').toLowerCase())&&<div className="empty-state">받은 초대가 없습니다.</div>}
+        </div>
         <div className="section-card">
           <div className="card-title"><UserPlus size={18}/>사용자 찾기</div>
           <div className="invite-controls friend-search"><input value={friendSearch} onChange={e=>setFriendSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchPeople()} placeholder="표시 이름으로 검색"/><button className="primary-action" onClick={searchPeople} disabled={friendBusy}>{friendBusy?'검색 중':'검색'}</button></div>
