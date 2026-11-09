@@ -365,7 +365,21 @@ function WorkspaceApp() {
           <div className="ai-content"><div className="ai-greeting"><div className="ai-orb"><Bot size={25}/></div><h2>무엇을 도와드릴까요?</h2><p>대화, 일정, 문서와 연결되는<br/>하나의 AI 작업 공간을 준비하고 있습니다.</p></div><div className="suggestion-title">이렇게 시작해 보세요</div><button className="suggestion" onClick={()=>setAiPrompt('오늘 대화 내용을 요약해 줘')}><MessageCircle size={16}/><span>오늘 대화 요약하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('팀 회의 안건을 작성해 줘')}><CalendarDays size={16}/><span>회의 안건 작성하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('NEXUS 개발 작업을 정리해 줘')}><ShieldCheck size={16}/><span>프로젝트 작업 정리하기</span><span>↗</span></button><div className="ai-response">{aiAnswer}</div></div>
           <div className="ai-input-wrap"><textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="NEXUS AI에게 요청하기..." rows={2}/><button onClick={askAi} aria-label="AI 요청 전송"><Send size={16}/></button><small>AI API 연결 전 데모 · 실제 답변은 아직 생성되지 않습니다.</small></div>
         </aside>
-      </div>:section==='community'?<section className="feature-page">
+      </div>:section==='dms'?<section className="feature-page">
+        <div className="feature-heading"><div><div className="eyebrow">PRIVATE CONVERSATIONS</div><h1>다이렉트 메시지</h1><p>친구로 등록된 실제 사용자와 대화합니다.</p></div></div>
+        <div className="dm-layout">
+          <aside className="section-card dm-list"><div className="card-title"><MessageCircle size={18}/>대화 목록</div>
+            {dmConversations.map(c=><button className={'dm-person '+(activeDm?.id===c.id?'selected':'')} key={c.id} onClick={()=>setActiveDm(c)}><div className="avatar violet">{c.person?.avatar_url?<img src={c.person.avatar_url}/>:((c.person?.display_name||'U').slice(0,1))}</div><div><strong>{c.person?.display_name||'사용자'}</strong><small>{c.person?.bio||'친구'}</small></div></button>)}
+            {!dmConversations.length&&<div className="empty-state">친구를 추가한 뒤 친구 목록에서 DM을 시작하세요.</div>}
+          </aside>
+          <div className="section-card dm-chat">
+            {activeDm?<><div className="dm-chat-head"><div className="avatar violet">{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div></div>
+              <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time></div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
+              <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
+            </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
+          </div>
+        </div>
+      </section>:section==='community'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">PEOPLE & COMMUNITY</div><h1>친구</h1><p>사용자를 검색하고 친구 요청을 관리합니다.</p></div></div>
         <div className="section-card">
           <div className="card-title"><UserPlus size={18}/>사용자 찾기</div>
