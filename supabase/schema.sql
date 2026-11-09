@@ -182,3 +182,29 @@ exception
   when duplicate_object then null;
   when undefined_object then raise notice 'supabase_realtime publication is unavailable; enable it in Supabase Realtime settings.';
 end $$;
+
+
+-- Friend requests
+create table public.friend_requests (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null references auth.users(id) on delete cascade,
+  recipient_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending','accepted','rejected')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint friend_requests_not_self check (sender_id <> recipient_id),
+  constraint friend_requests_unique_pair unique (sender_id,recipient_id)
+);
+create index friend_requests_recipient_status_idx on public.friend_requests(recipient_id,status);
+create index friend_requests_sender_status_idx on public.friend_requests(sender_id,status);
+alter table public.friend_requests enable row level security;
+grant select,insert,update,delete on public.friend_requests to authenticated;
+create policy "friend_requests_select_participant" on public.friend_requests for select to authenticated
+using (sender_id=(select auth.uid()) or recipient_id=(select auth.uid()));
+create policy "friend_requests_insert_sender" on public.friend_requests for insert to authenticated
+with check (sender_id=(select auth.uid()) and status='pending');
+create policy "friend_requests_update_recipient" on public.friend_requests for update to authenticated
+using (recipient_id=(select auth.uid()) and status='pending')
+with check (recipient_id=(select auth.uid()) and status in ('accepted','rejected'));
+create policy "friend_requests_delete_participant" on public.friend_requests for delete to authenticated
+using (sender_id=(select auth.uid()) or recipient_id=(select auth.uid()));
