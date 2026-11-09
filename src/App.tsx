@@ -14,7 +14,7 @@ function WorkspaceApp() {
   const [channels,setChannels] = useState(initialChannels);
   const [message,setMessage] = useState('');
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
-  const [currentUser,setCurrentUser] = useState<{id:string;name:string}|null>(null);
+  const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string}|null>(null);
   const [workspaceId,setWorkspaceId] = useState<string|null>(null);
   const [channelIds,setChannelIds] = useState<Record<string,string>>({});
   const [dbReady,setDbReady] = useState(false);
@@ -75,7 +75,7 @@ function WorkspaceApp() {
         if(alive)setServerApiReady(false);
       }
       const displayName=String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
-      if(alive)setCurrentUser({id:user.id,name:displayName});
+      if(alive)setCurrentUser({id:user.id,name:displayName,email:user.email||''});
       const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
       const {data:profileRow}=await supabase.from('profiles').select('display_name,bio,avatar_url,theme_color').eq('id',user.id).maybeSingle();
       if(profileRow&&alive)setProfile({display_name:profileRow.display_name||displayName,bio:profileRow.bio||'',avatar_url:profileRow.avatar_url||'',theme_color:profileRow.theme_color||'#7867e8'});
