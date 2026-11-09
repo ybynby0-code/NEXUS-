@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
 
-type Section = 'messages' | 'community' | 'meetings' | 'files';
+type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files';
 type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string };
 const initialChannels = ['general', 'announcements', 'development', 'random'];
 const initialMessages: ChatMessage[] = [];
@@ -23,6 +23,14 @@ function WorkspaceApp() {
   const [friendRequests,setFriendRequests] = useState<any[]>([]);
   const [friends,setFriends] = useState<any[]>([]);
   const [friendBusy,setFriendBusy] = useState(false);
+  const [dmConversations,setDmConversations] = useState<any[]>([]);
+  const [activeDm,setActiveDm] = useState<any>(null);
+  const [dmMessages,setDmMessages] = useState<any[]>([]);
+  const [dmDraft,setDmDraft] = useState('');
+  const [notifications,setNotifications] = useState<any[]>([]);
+  const [profile,setProfile] = useState({display_name:'',bio:'',avatar_url:'',theme_color:'#7867e8'});
+  const [profileBusy,setProfileBusy] = useState(false);
+  const avatarInput=useRef<HTMLInputElement>(null);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiAnswer,setAiAnswer] = useState('안녕하세요. NEXUS AI 작업 공간입니다. 현재는 인터페이스 미리보기이며, AI 모델 연결은 다음 개발 단계에서 진행합니다.');
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
@@ -56,6 +64,8 @@ function WorkspaceApp() {
       const displayName=String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
       if(alive)setCurrentUser({id:user.id,name:displayName});
       const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
+      const {data:profileRow}=await supabase.from('profiles').select('display_name,bio,avatar_url,theme_color').eq('id',user.id).maybeSingle();
+      if(profileRow&&alive)setProfile({display_name:profileRow.display_name||displayName,bio:profileRow.bio||'',avatar_url:profileRow.avatar_url||'',theme_color:profileRow.theme_color||'#7867e8'});
       if(profileError)throw profileError;
       const {data:membership,error:memberError}=await supabase.from('workspace_members').select('workspace_id').eq('user_id',user.id).limit(1).maybeSingle();
       if(memberError)throw memberError;
@@ -97,6 +107,74 @@ function WorkspaceApp() {
     }).subscribe();
     return()=>{alive=false;supabase.removeChannel(sub)};
   },[dbReady,activeChannel,channelIds,currentUser?.id]);
+
+  const loadDmConversations=async()=>{
+    if(!supabase||!currentUser)return;
+    const {data,error}=await supabase.from('dm_conversations').select('id,member_one,member_two,created_at').or('member_one.eq.'+currentUser.id+',member_two.eq.'+currentUser.id).order('created_at',{ascending:false});
+    if(error){notify('DM 목록 조회 실패: '+error.message);return;}
+    const rows=data||[];const ids=[...new Set(rows.map((c:any)=>c.member_one===currentUser.id?c.member_two:c.member_one))];
+    const {data:people}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio').in('id',ids):{data:[]};
+    const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
+    setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
+  };
+  const openDm=async(person:any)=>{
+    if(!supabase||!currentUser)return;
+    const pair=[currentUser.id,person.id].sort();
+    let {data,error}=await supabase.from('dm_conversations').select('*').eq('member_one',pair[0]).eq('member_two',pair[1]).maybeSingle();
+    if(error){notify('DM 열기 실패: '+error.message);return;}
+    if(!data){const result=await supabase.from('dm_conversations').insert({member_one:pair[0],member_two:pair[1]}).select('*').single();if(result.error){notify('친구 수락 후 DM을 시작할 수 있습니다. '+result.error.message);return;}data=result.data;}
+    setActiveDm({...data,person});setSection('dms');setMobilePanel('none');loadDmConversations();
+  };
+  const sendDm=async()=>{
+    const content=dmDraft.trim();if(!content||!supabase||!currentUser||!activeDm)return;
+    setDmDraft('');
+    const {error}=await supabase.from('dm_messages').insert({conversation_id:activeDm.id,sender_id:currentUser.id,content});
+    if(error){setDmDraft(content);notify('DM 전송 실패: '+error.message);}
+  };
+  const loadNotifications=async()=>{
+    if(!supabase||!currentUser)return;
+    const {data,error}=await supabase.from('notifications').select('*').order('created_at',{ascending:false}).limit(30);
+    if(error){console.error(error);return;}setNotifications(data||[]);
+  };
+  const markNotificationRead=async(id:string)=>{
+    if(!supabase)return;const at=new Date().toISOString();
+    await supabase.from('notifications').update({read_at:at}).eq('id',id);
+    setNotifications(v=>v.map(n=>n.id===id?{...n,read_at:at}:n));
+  };
+  const saveProfile=async()=>{
+    if(!supabase||!currentUser)return;setProfileBusy(true);
+    const {error}=await supabase.from('profiles').upsert({id:currentUser.id,display_name:profile.display_name.trim()||currentUser.name,bio:profile.bio.slice(0,160),avatar_url:profile.avatar_url,theme_color:profile.theme_color},{onConflict:'id'});
+    setProfileBusy(false);if(error)notify('프로필 저장 실패: '+error.message);else{notify('프로필을 저장했습니다.');setSettingsOpen(false);}
+  };
+  const uploadAvatar=async(file?:File)=>{
+    if(!file||!supabase||!currentUser)return;
+    if(!file.type.startsWith('image/')||file.size>5*1024*1024){notify('이미지 파일(5MB 이하)을 선택해 주세요.');return;}
+    const path=currentUser.id+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const {error}=await supabase.storage.from('nexus-avatars').upload(path,file,{upsert:true,contentType:file.type});
+    if(error){notify('사진 업로드 실패: '+error.message);return;}
+    const {data}=supabase.storage.from('nexus-avatars').getPublicUrl(path);
+    setProfile(v=>({...v,avatar_url:data.publicUrl}));notify('사진을 선택했습니다. 프로필 저장을 눌러 반영하세요.');
+  };
+  useEffect(()=>{
+    if(!supabase||!currentUser)return;
+    loadDmConversations();loadNotifications();
+    const sub=supabase.channel('nexus-notifications-'+currentUser.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'recipient_id=eq.'+currentUser.id},(payload:any)=>{
+      const n=payload.new;setNotifications(v=>[n,...v]);
+      if('Notification' in window&&Notification.permission==='granted')new Notification(n.title,{body:n.body,tag:n.id});else notify(n.title+': '+n.body);
+    }).subscribe();
+    return()=>{supabase?.removeChannel(sub);};
+  },[currentUser?.id]);
+  useEffect(()=>{
+    if(!supabase||!activeDm)return;let alive=true;
+    const load=async()=>{
+      const {data,error}=await supabase.from('dm_messages').select('id,sender_id,content,created_at,read_at').eq('conversation_id',activeDm.id).order('created_at').limit(100);
+      if(error)throw error;if(alive)setDmMessages(data||[]);
+      await supabase.from('dm_messages').update({read_at:new Date().toISOString()}).eq('conversation_id',activeDm.id).neq('sender_id',currentUser?.id||'').is('read_at',null);
+    };
+    load().catch(e=>notify('DM 불러오기 실패: '+e.message));
+    const sub=supabase.channel('nexus-dm-'+activeDm.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},(payload:any)=>{if(alive)setDmMessages(v=>v.some(x=>x.id===payload.new.id)?v:[...v,payload.new]);}).subscribe();
+    return()=>{alive=false;supabase?.removeChannel(sub);};
+  },[activeDm?.id,currentUser?.id]);
   const searchPeople=async()=>{
     const q=friendSearch.trim();if(!q||!supabase||!currentUser)return;
     setFriendBusy(true);
