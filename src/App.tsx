@@ -4,13 +4,9 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
 
 type Section = 'messages' | 'community' | 'meetings' | 'files';
-type ChatMessage = { id:number; name:string; initials:string; color:string; time:string; text:string };
+type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string };
 const initialChannels = ['general', 'announcements', 'development', 'random'];
-const initialMessages: ChatMessage[] = [
-  { id:1, name:'Mina', initials:'M', color:'violet', time:'오전 10:42', text:'NEXUS 첫 화면 구조 확인했어요. 채팅과 AI 작업 공간을 한곳에서 쓰는 방향 좋네요.' },
-  { id:2, name:'Jun', initials:'J', color:'blue', time:'오전 10:45', text:'다음은 실제 로그인과 메시지 저장을 연결하면 되겠습니다.' },
-  { id:3, name:'NEXUS AI', initials:'N', color:'green', time:'오전 10:46', text:'현재 화면은 프론트엔드 프로토타입입니다. 계정·실시간 동기화·AI API는 아직 연결되지 않았습니다.' },
-];
+const initialMessages: ChatMessage[] = [];
 
 function WorkspaceApp() {
   const [section,setSection] = useState<Section>('messages');
@@ -18,6 +14,10 @@ function WorkspaceApp() {
   const [channels,setChannels] = useState(initialChannels);
   const [message,setMessage] = useState('');
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [currentUser,setCurrentUser] = useState<{id:string;name:string}|null>(null);
+  const [workspaceId,setWorkspaceId] = useState<string|null>(null);
+  const [channelIds,setChannelIds] = useState<Record<string,string>>({});
+  const [dbReady,setDbReady] = useState(false);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiAnswer,setAiAnswer] = useState('안녕하세요. NEXUS AI 작업 공간입니다. 현재는 인터페이스 미리보기이며, AI 모델 연결은 다음 개발 단계에서 진행합니다.');
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
@@ -42,22 +42,79 @@ function WorkspaceApp() {
     };
     window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);
   },[]);
+  useEffect(()=>{
+    let alive=true;
+    const boot=async()=>{
+      if(!supabase)return;
+      const {data:{user},error:userError}=await supabase.auth.getUser();
+      if(userError||!user)throw userError||new Error('로그인 정보가 없습니다.');
+      const displayName=String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
+      if(alive)setCurrentUser({id:user.id,name:displayName});
+      const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
+      if(profileError)throw profileError;
+      const {data:membership,error:memberError}=await supabase.from('workspace_members').select('workspace_id').eq('user_id',user.id).limit(1).maybeSingle();
+      if(memberError)throw memberError;
+      let wid=membership?.workspace_id as string|undefined;
+      if(!wid){
+        const {data:workspace,error:workspaceError}=await supabase.from('workspaces').insert({name:'NEXUS Workspace',owner_id:user.id}).select('id').single();
+        if(workspaceError)throw workspaceError;
+        wid=workspace.id;
+        const {error:insertMemberError}=await supabase.from('workspace_members').insert({workspace_id:wid,user_id:user.id,role:'owner'});
+        if(insertMemberError)throw insertMemberError;
+        const defaults=['general','announcements','development','random'].map(name=>({workspace_id:wid!,name,created_by:user.id}));
+        const {error:channelsError}=await supabase.from('channels').insert(defaults);
+        if(channelsError)throw channelsError;
+      }
+      if(!alive)return;
+      setWorkspaceId(wid!);
+      const {data:rows,error:rowsError}=await supabase.from('channels').select('id,name').eq('workspace_id',wid!).order('created_at');
+      if(rowsError)throw rowsError;
+      const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
+      setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));
+      if(rows?.[0])setActiveChannel(rows[0].name);
+      setDbReady(true);
+    };
+    boot().catch(e=>{console.error(e);if(alive)notify('서버 초기화 실패: '+(e?.message||'오류'));});
+    return()=>{alive=false};
+  },[]);
+  useEffect(()=>{
+    if(!supabase||!dbReady||!channelIds[activeChannel])return;
+    let alive=true;const channelId=channelIds[activeChannel];
+    const load=async()=>{
+      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id,profiles(display_name)').eq('channel_id',channelId).order('created_at').limit(100);
+      if(error)throw error;
+      if(alive)setMessages((data||[]).map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':m.profiles?.display_name||'사용자',initials:(m.author_id===currentUser?.id?'나':m.profiles?.display_name||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
+    };
+    load().catch(e=>notify('메시지 조회 실패: '+e.message));
+    const sub=supabase.channel('nexus-'+channelId).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'channel_id=eq.'+channelId},async(payload:any)=>{
+      const m=payload.new;const {data:p}=await supabase.from('profiles').select('display_name').eq('id',m.author_id).maybeSingle();
+      if(alive)setMessages(prev=>prev.some(x=>x.id===m.id)?prev:[...prev,{id:m.id,name:m.author_id===currentUser?.id?'나':p?.display_name||'사용자',initials:(p?.display_name||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id}]);
+    }).subscribe();
+    return()=>{alive=false;supabase.removeChannel(sub)};
+  },[dbReady,activeChannel,channelIds,currentUser?.id]);
   const filteredMessages=useMemo(()=>messages.filter(m=>!searchQuery.trim()||m.text.toLowerCase().includes(searchQuery.toLowerCase())||m.name.toLowerCase().includes(searchQuery.toLowerCase())),[messages,searchQuery]);
 
-  const sendMessage=()=>{
-    const text=message.trim();if(!text)return;
-    setMessages(prev=>[...prev,{id:Date.now(),name:'나',initials:'나',color:'orange',time:'방금',text}]);setMessage('');
+  const sendMessage=async()=>{
+    const content=message.trim();if(!content)return;
+    const channelId=channelIds[activeChannel];
+    if(!supabase||!currentUser||!channelId){notify('서버 연결이 준비되지 않았습니다.');return;}
+    setMessage('');
+    const {error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content});
+    if(error){setMessage(content);notify('전송 실패: '+error.message);}
   };
   const askAi=()=>{
     const text=aiPrompt.trim();if(!text)return;
     setAiAnswer('요청을 받았습니다: “'+text+'”\n\n현재는 화면 동작 확인용 데모입니다. 실제 답변 생성과 외부 서비스 작업은 AI API 및 권한 연동 후 활성화됩니다.');
     setAiPrompt('');
   };
-  const addChannel=()=>{
+  const addChannel=async()=>{
     const name=channelDraft.trim().toLowerCase().replace(/[^a-z0-9가-힣_-]/g,'-');
     if(!name){notify('채널 이름을 입력해 주세요.');return}
     if(channels.includes(name)){notify('이미 존재하는 채널입니다.');return}
-    setChannels(v=>[...v,name]);setActiveChannel(name);setSection('messages');setChannelDraft('');setChannelDialog(false);notify('#'+name+' 채널을 추가했습니다.');
+    if(!supabase||!workspaceId||!currentUser){notify('서버 연결이 준비되지 않았습니다.');return;}
+    const {data,error}=await supabase.from('channels').insert({workspace_id:workspaceId,name,created_by:currentUser.id}).select('id,name').single();
+    if(error){notify('채널 생성 실패: '+error.message);return;}
+    setChannels(v=>[...v,name]);setChannelIds(v=>({...v,[name]:data.id}));setActiveChannel(name);setSection('messages');setChannelDraft('');setChannelDialog(false);notify('#'+name+' 채널을 생성했습니다.');
   };
   const addMember=()=>{
     const name=inviteDraft.trim();if(!name)return;
@@ -106,7 +163,7 @@ function WorkspaceApp() {
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>notify('채널 메뉴는 준비 중입니다.')} aria-label="더 보기"><MoreHorizontal size={18}/></button></div></div>
           <div className="topic-banner"><Sparkles size={16}/><span><b>NEXUS 프로젝트</b> — 하나의 공간에서 대화, AI, 협업을 연결합니다.</span></div>
           <div className="message-list">
-            <div className="date-divider"><span>오늘 · 2026년 11월 9일</span></div>
+            <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
             {messages.map(m=><article className="message-row" key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div><p>{m.text}</p></div></article>)}
           </div>
           <div className="composer-wrap"><div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={()=>{setSection('files');notify('파일 페이지에서 업로드 버튼을 눌러 파일을 선택해 주세요.')}}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 메시지" onClick={()=>notify('음성 메시지는 마이크 권한 및 서버 연결 후 제공됩니다.')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 현재 브라우저 내 데모</div></div>
