@@ -312,7 +312,6 @@ function WorkspaceApp() {
       setSection('messages');
       setMobilePanel('none');
     }
-    await loadWorkspacePeople();
   };
   const loadWorkspaceFiles=async()=>{
     if(!supabase||!workspaceId)return;
