@@ -249,7 +249,7 @@ function WorkspaceApp() {
 
 function AuthGate() {
   const [session,setSession] = useState<any>(null);
-  const [loading,setLoading] = useState(true);
+  const [loading,setLoading] = useState(false);
   const [mode,setMode] = useState<'signin'|'signup'>('signin');
   const [email,setEmail] = useState('');
   const [password,setPassword] = useState('');
