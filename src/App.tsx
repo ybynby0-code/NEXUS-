@@ -186,12 +186,29 @@ function WorkspaceApp() {
   },[currentUser?.id]);
   useEffect(()=>{
     if(!supabase||!activeDm)return;let alive=true;
+    const markIncomingRead=async(rows:any[])=>{
+      const unread=rows.filter(m=>m.sender_id!==currentUser?.id&&!m.read_at).map(m=>m.id);
+      if(!unread.length)return;
+      const at=new Date().toISOString();
+      const {error}=await supabase.from('dm_messages').update({read_at:at}).in('id',unread);
+      if(error){console.warn('[NEXUS DM read receipt]',error);return;}
+      if(alive)setDmMessages(v=>v.map(m=>unread.includes(m.id)?{...m,read_at:at}:m));
+    };
     const load=async()=>{
       const {data,error}=await supabase.from('dm_messages').select('id,sender_id,content,created_at,read_at').eq('conversation_id',activeDm.id).order('created_at').limit(100);
-      if(error)throw error;if(alive)setDmMessages(data||[]);
+      if(error)throw error;
+      if(alive)setDmMessages(data||[]);
+      await markIncomingRead(data||[]);
     };
     load().catch(e=>notify('DM 불러오기 실패: '+e.message));
-    const sub=supabase.channel('nexus-dm-'+activeDm.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},(payload:any)=>{if(alive)setDmMessages(v=>v.some(x=>x.id===payload.new.id)?v:[...v,payload.new]);}).subscribe();
+    const sub=supabase.channel('nexus-dm-'+activeDm.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},async(payload:any)=>{
+        if(alive)setDmMessages(v=>v.some(x=>x.id===payload.new.id)?v:[...v,payload.new]);
+        if(payload.new.sender_id!==currentUser?.id)await markIncomingRead([payload.new]);
+      })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},(payload:any)=>{
+        if(alive)setDmMessages(v=>v.map(m=>m.id===payload.new.id?{...m,...payload.new}:m));
+      }).subscribe();
     return()=>{alive=false;supabase?.removeChannel(sub);};
   },[activeDm?.id,currentUser?.id]);
 
@@ -353,7 +370,7 @@ function WorkspaceApp() {
           </aside>
           <div className="section-card dm-chat">
             {activeDm?<><div className="dm-chat-head"><div className="avatar violet">{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div></div>
-              <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time></div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
+              <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time>{m.sender_id===currentUser?.id&&<small className="dm-read-state">{m.read_at?'읽음':'전송됨'}</small>}</div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
               <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
             </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
           </div>
