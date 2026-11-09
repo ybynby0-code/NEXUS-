@@ -81,9 +81,9 @@ function WorkspaceApp() {
     if(!supabase||!dbReady||!channelIds[activeChannel])return;
     let alive=true;const channelId=channelIds[activeChannel];
     const load=async()=>{
-      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id,profiles(display_name)').eq('channel_id',channelId).order('created_at').limit(100);
+      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id').eq('channel_id',channelId).order('created_at').limit(100);
       if(error)throw error;
-      if(alive)setMessages((data||[]).map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':m.profiles?.display_name||'사용자',initials:(m.author_id===currentUser?.id?'나':m.profiles?.display_name||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
+      const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name').in('id',ids):{data:[]};const names:Record<string,string>={};(profiles||[]).forEach((p:any)=>names[p.id]=p.display_name);if(alive)setMessages((data||[]).map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':names[m.author_id]||'사용자',initials:(m.author_id===currentUser?.id?'나':names[m.author_id]||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
     };
     load().catch(e=>notify('메시지 조회 실패: '+e.message));
     const sub=supabase.channel('nexus-'+channelId).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'channel_id=eq.'+channelId},async(payload:any)=>{
