@@ -31,6 +31,14 @@ function WorkspaceApp() {
   const [profile,setProfile] = useState({display_name:'',bio:'',avatar_url:'',theme_color:'#7867e8'});
   const [profileBusy,setProfileBusy] = useState(false);
   const avatarInput=useRef<HTMLInputElement>(null);
+  const [dmConversations,setDmConversations] = useState<any[]>([]);
+  const [activeDm,setActiveDm] = useState<any>(null);
+  const [dmMessages,setDmMessages] = useState<any[]>([]);
+  const [dmDraft,setDmDraft] = useState('');
+  const [notifications,setNotifications] = useState<any[]>([]);
+  const [profile,setProfile] = useState({display_name:'',bio:'',avatar_url:'',theme_color:'#7867e8'});
+  const [profileBusy,setProfileBusy] = useState(false);
+  const avatarInput=useRef<HTMLInputElement>(null);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiAnswer,setAiAnswer] = useState('안녕하세요. NEXUS AI 작업 공간입니다. 현재는 인터페이스 미리보기이며, AI 모델 연결은 다음 개발 단계에서 진행합니다.');
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
