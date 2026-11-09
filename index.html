@@ -13,15 +13,30 @@
     <style>
       html,body,#root{margin:0;min-width:320px;min-height:100%;background:#090d18;color:#e8ecf5}
       #boot{min-height:100dvh;display:grid;place-items:center;padding:24px;box-sizing:border-box;font:14px system-ui,sans-serif;color:#c8c2ff;text-align:center}
+      #boot pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left;color:#ffb6b6;font-size:11px}
     </style>
   </head>
   <body>
     <div id="root"><div id="boot">NEXUS 화면을 불러오는 중...</div></div>
     <script>
+      window.__nexusBootError = '';
+      window.addEventListener('error', function(e) {
+        if (e.target && e.target.tagName === 'SCRIPT') {
+          window.__nexusBootError = '스크립트 파일 로드 실패: ' + (e.target.src || '(주소 없음)');
+        } else if (e.message) {
+          window.__nexusBootError = 'JavaScript 오류: ' + e.message + ' / ' + (e.filename || '') + ':' + (e.lineno || '');
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        window.__nexusBootError = '비동기 실행 오류: ' + String(e.reason && (e.reason.stack || e.reason.message) || e.reason);
+      });
       window.setTimeout(function(){
         var boot=document.getElementById('boot');
         if(boot){
-          boot.innerHTML='<div><strong style="font-size:20px">NEXUS 앱 실행 실패</strong><p style="color:#aeb8cc;line-height:1.7">화면 스크립트가 실행되지 않았습니다.<br>페이지 주소 또는 스크립트 경로를 확인해야 합니다.</p><button onclick="location.reload()" style="padding:13px 20px;border:0;border-radius:10px;background:#7665e8;color:white;font-weight:700">다시 시도</button></div>';
+          var script=document.querySelector('script[type="module"][src]');
+          var detail=window.__nexusBootError || '모듈 스크립트가 시작되지 않았습니다. 브라우저가 스크립트 요청을 차단했거나 서버가 파일을 찾지 못했을 수 있습니다.';
+          boot.innerHTML='<div style="max-width:560px"><strong style="font-size:20px">NEXUS 앱 실행 실패</strong><p style="color:#aeb8cc;line-height:1.7">오류 진단 정보입니다. 이 화면을 캡처해 보내주세요.</p><pre></pre><button onclick="location.reload()" style="padding:13px 20px;border:0;border-radius:10px;background:#7665e8;color:white;font-weight:700">다시 시도</button></div>';
+          boot.querySelector('pre').textContent=detail+'\n페이지: '+location.href+'\n스크립트 주소: '+(script ? script.src : '스크립트 태그 없음');
         }
       },10000);
     </script>
