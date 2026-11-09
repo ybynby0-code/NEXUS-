@@ -355,15 +355,15 @@ function WorkspaceApp() {
   return <div className="app-shell">
     <aside className={`sidebar ${mobilePanel==='nav'?'mobile-open':''}`}>
 
-      <div className="workspace-switch"><div className="workspace-icon">N</div><div><strong>NEXUS Workspace</strong><small>개인 워크스페이스</small></div><ChevronDown size={16}/></div>
+      <div className="workspace-switch"><div className="workspace-icon">N<span>•</span></div><div><strong>NEXUS</strong><small>YOUR SPACE, CONNECTED</small></div><ChevronDown size={16}/></div>
       <button className="sidebar-search" onClick={()=>setSearchOpen(true)}><Search size={15}/><span>빠른 검색</span><kbd>Ctrl K</kbd></button>
-      <div className="side-label">WORKSPACE <button aria-label="워크스페이스 추가" onClick={()=>notify('워크스페이스 추가 기능은 준비 중입니다.')}><Plus size={15}/></button></div>
+      <div className="side-label">YOUR WORKSPACE <button aria-label="워크스페이스 추가" onClick={()=>notify('워크스페이스 추가 기능은 준비 중입니다.')}><Plus size={15}/></button></div>
       <button className={`side-link ${section==='messages'?'selected':''}`} onClick={()=>setSection('messages')}><MessageCircle size={17}/>메시지 <span className="count">{messages.length}</span></button>
       <button className={`side-link ${section==='dms'?'selected':''}`} onClick={()=>setSection('dms')}><MessageCircle size={17}/>DM</button>
       <button className={`side-link ${section==='community'?'selected':''}`} onClick={()=>setSection('community')}><Compass size={17}/>커뮤니티</button>
       <button className={`side-link ${section==='meetings'?'selected':''}`} onClick={()=>setSection('meetings')}><Video size={17}/>회의 및 통화</button>
       <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>setSection('files')}><FileText size={17}/>파일 및 문서</button>
-      <div className="side-label channels-label">채널 <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
+      <div className="side-label channels-label">CHANNELS <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
       <div className="side-bottom"><div className="online-dot"/><span>워크스페이스 상태</span><span className="online-text">온라인</span></div>
     </aside>
@@ -373,7 +373,7 @@ function WorkspaceApp() {
     <main className="main-area">
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
-        <div className="breadcrumbs"><span>Workspace</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':'파일 및 문서'}</strong></div>
+        <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':'파일 및 문서'}</strong></div>
         <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="활동" onClick={()=>notify('최근 활동이 없습니다.')}><Activity size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
 
@@ -447,7 +447,7 @@ function WorkspaceApp() {
         <div className="upload-zone" onClick={()=>!filesBusy&&fileInput.current?.click()}><FolderOpen size={30}/><strong>{filesBusy?'파일을 업로드하고 있습니다':'파일을 선택하거나 여기를 누르세요'}</strong><span>최대 파일 크기 25MB · 로그인한 워크스페이스 멤버만 접근할 수 있습니다.</span></div>
         <div className="section-card"><div className="card-title"><FileText size={18}/>공유 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">공유된 파일이 없습니다.</div>:files.map(file=><div className="file-row" key={file.id}><div className="file-type"><FileText size={17}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB · {new Date(file.created_at).toLocaleString('ko-KR')}</small></div><button className="secondary-action" onClick={()=>downloadWorkspaceFile(file)}>다운로드</button>{file.uploaded_by===currentUser?.id&&<button className="secondary-action" onClick={()=>deleteWorkspaceFile(file)}>삭제</button>}</div>)}</div>
       </section>}
-      <footer className="status-footer"><span><i/>{serverApiReady?"NEXUS 서버 API 연결됨":dbReady?"DB 연결됨 · API 확인 필요":"서버 연결 확인 중"}</span><span>SUPABASE · SEOUL</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
+      <footer className="status-footer"><span><i/>{serverApiReady?"시스템 연결됨":dbReady?"데이터베이스 연결됨":"연결 확인 중"}</span><span>SUPABASE · SEOUL</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
     </main>
 
     {searchOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSearchOpen(false)}}><div className="search-modal"><div className="search-input-row"><Search size={19}/><input autoFocus value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="메시지와 멤버 검색..."/><button onClick={()=>setSearchOpen(false)}><X size={18}/></button></div><div className="search-results"><div className="search-caption">메시지 검색 결과 · {filteredMessages.length}개</div>{filteredMessages.map(m=><button className="search-result" key={m.id} onClick={()=>{setSection('messages');setSearchOpen(false);setSearchQuery('')}}><div className={`avatar ${m.color}`}>{m.initials}</div><div><strong>{m.name}</strong><p>{m.text}</p></div></button>)}{filteredMessages.length===0&&<div className="empty-state">검색 결과가 없습니다.</div>}</div><div className="search-foot">ESC 닫기 · Ctrl K 검색 열기</div></div></div>}
