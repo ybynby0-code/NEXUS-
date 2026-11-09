@@ -274,3 +274,53 @@ for delete to authenticated using (
   bucket_id = 'nexus-files'
   and (storage.foldername(name))[2] = (select auth.uid())::text
 );
+
+
+-- Workspace invitations. Invitation creation is server-only through the invite-workspace-member Edge Function.
+create table if not exists public.workspace_invites (
+ id uuid primary key default gen_random_uuid(),
+ workspace_id uuid not null references public.workspaces(id) on delete cascade,
+ email text not null,
+ invited_by uuid not null references auth.users(id) on delete cascade,
+ status text not null default 'pending' check(status in ('pending','accepted','expired','cancelled')),
+ expires_at timestamptz not null default now() + interval '7 days',
+ created_at timestamptz not null default now(),
+ accepted_by uuid references auth.users(id) on delete set null,
+ accepted_at timestamptz,
+ constraint workspace_invites_email_format check (position('@' in email)>1)
+);
+create index if not exists workspace_invites_workspace_created_idx on public.workspace_invites(workspace_id,created_at desc);
+create index if not exists workspace_invites_email_status_idx on public.workspace_invites(lower(email),status);
+create unique index if not exists workspace_invites_one_pending_email on public.workspace_invites(workspace_id,lower(email)) where status='pending';
+alter table public.workspace_invites enable row level security;
+grant select on public.workspace_invites to authenticated;
+create policy workspace_invites_select_owner_or_invitee on public.workspace_invites for select to authenticated using (
+ lower(email)=lower(coalesce(auth.jwt()->>'email',''))
+ or exists(select 1 from public.workspace_members wm where wm.workspace_id=workspace_id and wm.user_id=(select auth.uid()) and wm.role in ('owner','admin'))
+ or exists(select 1 from public.workspaces w where w.id=workspace_id and w.owner_id=(select auth.uid()))
+);
+revoke insert,update,delete on public.workspace_invites from anon,authenticated;
+create or replace function public.accept_workspace_invite(p_invite_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_inv public.workspace_invites%rowtype; v_email text;
+begin
+ if auth.uid() is null then raise exception '로그인이 필요합니다.'; end if;
+ v_email := lower(coalesce(auth.jwt()->>'email',''));
+ if v_email = '' then raise exception '인증된 이메일을 확인할 수 없습니다.'; end if;
+ select * into v_inv from public.workspace_invites where id=p_invite_id for update;
+ if not found then raise exception '초대를 찾을 수 없습니다.'; end if;
+ if lower(v_inv.email) <> v_email then raise exception '초대받은 이메일 계정으로 로그인해야 합니다.'; end if;
+ if v_inv.status <> 'pending' then raise exception '이미 처리된 초대입니다.'; end if;
+ if v_inv.expires_at <= now() then update public.workspace_invites set status='expired' where id=p_invite_id; raise exception '초대가 만료되었습니다.'; end if;
+ insert into public.workspace_members(workspace_id,user_id,role) values(v_inv.workspace_id,auth.uid(),'member') on conflict(workspace_id,user_id) do nothing;
+ update public.workspace_invites set status='accepted',accepted_by=auth.uid(),accepted_at=now() where id=p_invite_id;
+ return jsonb_build_object('ok',true,'workspace_id',v_inv.workspace_id);
+end; $$;
+revoke all on function public.accept_workspace_invite(uuid) from public,anon;
+grant execute on function public.accept_workspace_invite(uuid) to authenticated;
+
+drop policy if exists workspace_members_select_owner_admin on public.workspace_members;
+create policy workspace_members_select_owner_admin on public.workspace_members for select to authenticated using (
+ exists(select 1 from public.workspace_members mine where mine.workspace_id=workspace_id and mine.user_id=(select auth.uid()) and mine.role in ('owner','admin'))
+ or exists(select 1 from public.workspaces w where w.id=workspace_id and w.owner_id=(select auth.uid()))
+);
