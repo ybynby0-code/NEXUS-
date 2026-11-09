@@ -353,20 +353,8 @@ function WorkspaceApp() {
   };
 
   return <div className="app-shell">
-    <aside className={`nav-rail ${mobilePanel==='nav'?'mobile-open':''}`}>
-      <div className="brand-mark">NX<span>•</span></div>
-      <button className={`rail-item ${section==='messages'?'active':''}`} aria-label="메시지" onClick={()=>{setSection('messages');setMobilePanel('none')}}><MessageCircle size={20}/></button>
-      <button className={`rail-item ${section==='dms'?'active':''}`} aria-label="DM" onClick={()=>{setSection('dms');setMobilePanel('none')}}><MessageCircle size={20}/></button>
-      <button className={`rail-item ${section==='community'?'active':''}`} aria-label="커뮤니티" onClick={()=>{setSection('community');setMobilePanel('none')}}><Users size={20}/></button>
-      <button className={`rail-item ${section==='meetings'?'active':''}`} aria-label="회의" onClick={()=>{setSection('meetings');setMobilePanel('none')}}><Video size={20}/></button>
-      <button className={`rail-item ${section==='files'?'active':''}`} aria-label="파일" onClick={()=>{setSection('files');setMobilePanel('none')}}><FileText size={20}/></button>
-      <div className="rail-spacer"/>
-      <button className="rail-item" aria-label="도움말" onClick={()=>notify('도움말 센터는 준비 중입니다.')}><CircleHelp size={20}/></button>
-      <button className="rail-item" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={20}/></button>
-      <div className="profile-mini">{profile.avatar_url?<img src={profile.avatar_url}/>:((profile.display_name||currentUser?.name||"N").slice(0,1))}</div>
-    </aside>
-
     <aside className={`sidebar ${mobilePanel==='nav'?'mobile-open':''}`}>
+
       <div className="workspace-switch"><div className="workspace-icon">N</div><div><strong>NEXUS Workspace</strong><small>개인 워크스페이스</small></div><ChevronDown size={16}/></div>
       <button className="sidebar-search" onClick={()=>setSearchOpen(true)}><Search size={15}/><span>빠른 검색</span><kbd>Ctrl K</kbd></button>
       <div className="side-label">WORKSPACE <button aria-label="워크스페이스 추가" onClick={()=>notify('워크스페이스 추가 기능은 준비 중입니다.')}><Plus size={15}/></button></div>
@@ -379,6 +367,8 @@ function WorkspaceApp() {
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
       <div className="side-bottom"><div className="online-dot"/><span>워크스페이스 상태</span><span className="online-text">온라인</span></div>
     </aside>
+    <button className={`mobile-scrim ${mobilePanel==='nav'?'visible':''}`} aria-label="메뉴 닫기" onClick={()=>setMobilePanel('none')}/>
+
 
     <main className="main-area">
       <header className="topbar">
