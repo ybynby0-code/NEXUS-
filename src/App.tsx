@@ -319,7 +319,7 @@ function WorkspaceApp() {
 
   return <div className="app-shell">
     <aside className={`nav-rail ${mobilePanel==='nav'?'mobile-open':''}`}>
-      <div className="brand-mark">N<span>.</span></div>
+      <div className="brand-mark">NX<span>•</span></div>
       <button className={`rail-item ${section==='messages'?'active':''}`} aria-label="메시지" onClick={()=>{setSection('messages');setMobilePanel('none')}}><MessageCircle size={20}/></button>
       <button className={`rail-item ${section==='dms'?'active':''}`} aria-label="DM" onClick={()=>{setSection('dms');setMobilePanel('none')}}><MessageCircle size={20}/></button>
       <button className={`rail-item ${section==='community'?'active':''}`} aria-label="커뮤니티" onClick={()=>{setSection('community');setMobilePanel('none')}}><Users size={20}/></button>
@@ -328,7 +328,7 @@ function WorkspaceApp() {
       <div className="rail-spacer"/>
       <button className="rail-item" aria-label="도움말" onClick={()=>notify('도움말 센터는 준비 중입니다.')}><CircleHelp size={20}/></button>
       <button className="rail-item" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={20}/></button>
-      <div className="profile-mini">Y</div>
+      <div className="profile-mini">{profile.avatar_url?<img src={profile.avatar_url}/>:((profile.display_name||currentUser?.name||"N").slice(0,1))}</div>
     </aside>
 
     <aside className={`sidebar ${mobilePanel==='nav'?'mobile-open':''}`}>
