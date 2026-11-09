@@ -18,6 +18,7 @@ function WorkspaceApp() {
   const [workspaceId,setWorkspaceId] = useState<string|null>(null);
   const [channelIds,setChannelIds] = useState<Record<string,string>>({});
   const [dbReady,setDbReady] = useState(false);
+  const [serverApiReady,setServerApiReady] = useState(false);
   const [friendSearch,setFriendSearch] = useState('');
   const [friendResults,setFriendResults] = useState<any[]>([]);
   const [friendRequests,setFriendRequests] = useState<any[]>([]);
@@ -61,6 +62,14 @@ function WorkspaceApp() {
       if(!supabase)return;
       const {data:{user},error:userError}=await supabase.auth.getUser();
       if(userError||!user)throw userError||new Error('로그인 정보가 없습니다.');
+      try {
+        const {data:apiHealth,error:apiError}=await supabase.functions.invoke('nexus-api');
+        if(apiError)throw apiError;
+        if(alive)setServerApiReady(apiHealth?.ok===true);
+      } catch(apiError) {
+        console.warn('[NEXUS API health check]',apiError);
+        if(alive)setServerApiReady(false);
+      }
       const displayName=String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
       if(alive)setCurrentUser({id:user.id,name:displayName});
       const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
@@ -329,7 +338,7 @@ function WorkspaceApp() {
         <div className="upload-zone" onClick={()=>fileInput.current?.click()}><FolderOpen size={30}/><strong>파일을 선택하거나 여기를 누르세요</strong><span>선택한 파일은 현재 브라우저 화면에 이름만 표시됩니다. 서버 업로드는 아직 지원하지 않습니다.</span></div>
         <div className="section-card"><div className="card-title"><FileText size={18}/>최근 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">아직 선택한 파일이 없습니다.</div>:files.map((name,i)=><div className="file-row" key={i}><div className="file-type"><FileText size={17}/></div><div><strong>{name}</strong><small>이 기기에서 선택됨 · 업로드 전</small></div><span className="file-local">로컬</span></div>)}</div>
       </section>}
-      <footer className="status-footer"><span><i/>NEXUS 프로토타입</span><span>V0.2 · INTERACTIVE UI</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
+      <footer className="status-footer"><span><i/>{serverApiReady?"NEXUS 서버 API 연결됨":dbReady?"DB 연결됨 · API 확인 필요":"서버 연결 확인 중"}</span><span>SUPABASE · SEOUL</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
     </main>
 
     {searchOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSearchOpen(false)}}><div className="search-modal"><div className="search-input-row"><Search size={19}/><input autoFocus value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="메시지와 멤버 검색..."/><button onClick={()=>setSearchOpen(false)}><X size={18}/></button></div><div className="search-results"><div className="search-caption">메시지 검색 결과 · {filteredMessages.length}개</div>{filteredMessages.map(m=><button className="search-result" key={m.id} onClick={()=>{setSection('messages');setSearchOpen(false);setSearchQuery('')}}><div className={`avatar ${m.color}`}>{m.initials}</div><div><strong>{m.name}</strong><p>{m.text}</p></div></button>)}{filteredMessages.length===0&&<div className="empty-state">검색 결과가 없습니다.</div>}</div><div className="search-foot">ESC 닫기 · Ctrl K 검색 열기</div></div></div>}
