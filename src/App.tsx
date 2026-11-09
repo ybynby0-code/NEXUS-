@@ -183,6 +183,74 @@ function WorkspaceApp() {
     const sub=supabase.channel('nexus-dm-'+activeDm.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},(payload:any)=>{if(alive)setDmMessages(v=>v.some(x=>x.id===payload.new.id)?v:[...v,payload.new]);}).subscribe();
     return()=>{alive=false;supabase?.removeChannel(sub);};
   },[activeDm?.id,currentUser?.id]);
+
+  const loadDmConversations=async()=>{
+    if(!supabase||!currentUser)return;
+    const {data,error}=await supabase.from('dm_conversations').select('id,member_one,member_two,created_at').or('member_one.eq.'+currentUser.id+',member_two.eq.'+currentUser.id).order('created_at',{ascending:false});
+    if(error){notify('DM 목록 조회 실패: '+error.message);return;}
+    const rows=data||[];const ids=[...new Set(rows.map((c:any)=>c.member_one===currentUser.id?c.member_two:c.member_one))];
+    const {data:people}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio').in('id',ids):{data:[]};
+    const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
+    setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
+  };
+  const openDm=async(person:any)=>{
+    if(!supabase||!currentUser)return;
+    const pair=[currentUser.id,person.id].sort();
+    let {data,error}=await supabase.from('dm_conversations').select('*').eq('member_one',pair[0]).eq('member_two',pair[1]).maybeSingle();
+    if(error){notify('DM 열기 실패: '+error.message);return;}
+    if(!data){const result=await supabase.from('dm_conversations').insert({member_one:pair[0],member_two:pair[1]}).select('*').single();if(result.error){notify('친구 수락 후 DM을 시작할 수 있습니다. '+result.error.message);return;}data=result.data;}
+    setActiveDm({...data,person});setSection('dms');setMobilePanel('none');loadDmConversations();
+  };
+  const sendDm=async()=>{
+    const content=dmDraft.trim();if(!content||!supabase||!currentUser||!activeDm)return;
+    setDmDraft('');
+    const {error}=await supabase.from('dm_messages').insert({conversation_id:activeDm.id,sender_id:currentUser.id,content});
+    if(error){setDmDraft(content);notify('DM 전송 실패: '+error.message);}
+  };
+  const loadNotifications=async()=>{
+    if(!supabase||!currentUser)return;
+    const {data,error}=await supabase.from('notifications').select('*').order('created_at',{ascending:false}).limit(30);
+    if(error){console.error(error);return;}setNotifications(data||[]);
+  };
+  const markNotificationRead=async(id:string)=>{
+    if(!supabase)return;const at=new Date().toISOString();
+    await supabase.from('notifications').update({read_at:at}).eq('id',id);
+    setNotifications(v=>v.map(n=>n.id===id?{...n,read_at:at}:n));
+  };
+  const saveProfile=async()=>{
+    if(!supabase||!currentUser)return;setProfileBusy(true);
+    const {error}=await supabase.from('profiles').upsert({id:currentUser.id,display_name:profile.display_name.trim()||currentUser.name,bio:profile.bio.slice(0,160),avatar_url:profile.avatar_url,theme_color:profile.theme_color},{onConflict:'id'});
+    setProfileBusy(false);if(error)notify('프로필 저장 실패: '+error.message);else{notify('프로필을 저장했습니다.');setSettingsOpen(false);}
+  };
+  const uploadAvatar=async(file?:File)=>{
+    if(!file||!supabase||!currentUser)return;
+    if(!file.type.startsWith('image/')||file.size>5*1024*1024){notify('이미지 파일(5MB 이하)을 선택해 주세요.');return;}
+    const path=currentUser.id+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const {error}=await supabase.storage.from('nexus-avatars').upload(path,file,{upsert:true,contentType:file.type});
+    if(error){notify('사진 업로드 실패: '+error.message);return;}
+    const {data}=supabase.storage.from('nexus-avatars').getPublicUrl(path);
+    setProfile(v=>({...v,avatar_url:data.publicUrl}));notify('사진을 선택했습니다. 프로필 저장을 눌러 반영하세요.');
+  };
+  useEffect(()=>{
+    if(!supabase||!currentUser)return;
+    loadDmConversations();loadNotifications();
+    const sub=supabase.channel('nexus-notifications-'+currentUser.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'recipient_id=eq.'+currentUser.id},(payload:any)=>{
+      const n=payload.new;setNotifications(v=>[n,...v]);
+      if('Notification' in window&&Notification.permission==='granted')new Notification(n.title,{body:n.body,tag:n.id});else notify(n.title+': '+n.body);
+    }).subscribe();
+    return()=>{supabase?.removeChannel(sub);};
+  },[currentUser?.id]);
+  useEffect(()=>{
+    if(!supabase||!activeDm)return;let alive=true;
+    const load=async()=>{
+      const {data,error}=await supabase.from('dm_messages').select('id,sender_id,content,created_at,read_at').eq('conversation_id',activeDm.id).order('created_at').limit(100);
+      if(error)throw error;if(alive)setDmMessages(data||[]);
+      await supabase.from('dm_messages').update({read_at:new Date().toISOString()}).eq('conversation_id',activeDm.id).neq('sender_id',currentUser?.id||'').is('read_at',null);
+    };
+    load().catch(e=>notify('DM 불러오기 실패: '+e.message));
+    const sub=supabase.channel('nexus-dm-'+activeDm.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},(payload:any)=>{if(alive)setDmMessages(v=>v.some(x=>x.id===payload.new.id)?v:[...v,payload.new]);}).subscribe();
+    return()=>{alive=false;supabase?.removeChannel(sub);};
+  },[activeDm?.id,currentUser?.id]);
   const searchPeople=async()=>{
     const q=friendSearch.trim();if(!q||!supabase||!currentUser)return;
     setFriendBusy(true);
