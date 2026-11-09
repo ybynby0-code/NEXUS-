@@ -306,7 +306,12 @@ function AuthGate() {
           options:{data:{display_name:displayName.trim() || email.split('@')[0]}}
         });
         if (authError) throw authError;
-        if (!data.session) setError('가입 요청이 완료됐습니다. 이메일 인증 후 로그인해 주세요.');
+        if (data.session) {
+          setSession(data.session);
+          setError('');
+        } else {
+          setError('이메일 인증이 아직 켜져 있습니다. Supabase에서 Confirm email을 끄면 가입 즉시 로그인됩니다.');
+        }
       } else {
         const {error:authError} = await supabase.auth.signInWithPassword({email:email.trim(),password});
         if (authError) throw authError;
@@ -329,7 +334,7 @@ function AuthGate() {
     {error&&<div className="auth-error">{error}</div>}
     <button className="primary-action auth-submit" disabled={busy}>{busy?'처리 중...':mode==='signin'?'로그인':'가입하기'}</button>
     <button type="button" className="auth-switch" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('')}}>{mode==='signin'?'계정이 없으신가요? 회원가입':'이미 계정이 있으신가요? 로그인'}</button>
-    <small>이메일 인증 설정에 따라 가입 후 확인 메일이 발송될 수 있습니다.</small>
+    <small>이메일 인증을 끄면 가입 직후 바로 로그인됩니다.</small>
   </form></div>;
   return <WorkspaceApp/>;
 }
