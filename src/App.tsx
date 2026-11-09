@@ -45,7 +45,8 @@ function WorkspaceApp() {
   const [members,setMembers] = useState(['Mina','Jun','Alex','Sora','You']);
   const [inviteDraft,setInviteDraft] = useState('');
   const [meetingCreated,setMeetingCreated] = useState(false);
-  const [files,setFiles] = useState<string[]>([]);
+  const [files,setFiles] = useState<any[]>([]);
+  const [filesBusy,setFilesBusy] = useState(false);
   const [toast,setToast] = useState('');
   const fileInput=useRef<HTMLInputElement>(null);
 
@@ -254,8 +255,43 @@ function WorkspaceApp() {
     if(members.includes(name)){notify('이미 멤버 목록에 있습니다.');return}
     setMembers(v=>[...v,name]);setInviteDraft('');notify(name+' 님을 데모 멤버로 추가했습니다.');
   };
-  const addFiles=(list:FileList|null)=>{
-    if(!list)return;const names=Array.from(list).map(f=>f.name);setFiles(v=>[...v,...names]);if(names.length)notify(names.length+'개 파일을 목록에 추가했습니다.');
+  const loadWorkspaceFiles=async()=>{
+    if(!supabase||!workspaceId)return;
+    const {data,error}=await supabase.from('workspace_files').select('id,file_name,mime_type,size_bytes,storage_path,uploaded_by,created_at').eq('workspace_id',workspaceId).order('created_at',{ascending:false}).limit(100);
+    if(error){notify('파일 목록 조회 실패: '+error.message);return;}
+    setFiles(data||[]);
+  };
+  useEffect(()=>{if(dbReady&&workspaceId&&section==='files')loadWorkspaceFiles()},[dbReady,workspaceId,section]);
+  const addFiles=async(list:FileList|null)=>{
+    if(!list||!supabase||!workspaceId||!currentUser)return;
+    const selected=Array.from(list);if(!selected.length)return;
+    setFilesBusy(true);
+    for(const file of selected){
+      if(file.size>25*1024*1024){notify(file.name+': 25MB 제한을 초과했습니다.');continue;}
+      const safeName=file.name.replace(/[^a-zA-Z0-9._가-힣-]/g,'_');
+      const path=workspaceId+'/'+currentUser.id+'/'+Date.now()+'-'+safeName;
+      const uploaded=await supabase.storage.from('nexus-files').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
+      if(uploaded.error){notify(file.name+' 업로드 실패: '+uploaded.error.message);continue;}
+      const saved=await supabase.from('workspace_files').insert({workspace_id:workspaceId,uploaded_by:currentUser.id,file_name:file.name,storage_path:path,mime_type:file.type||'application/octet-stream',size_bytes:file.size});
+      if(saved.error){await supabase.storage.from('nexus-files').remove([path]);notify(file.name+' 정보 저장 실패: '+saved.error.message);}
+    }
+    await loadWorkspaceFiles();
+    setFilesBusy(false);
+    if(fileInput.current)fileInput.current.value='';
+  };
+  const downloadWorkspaceFile=async(file:any)=>{
+    if(!supabase)return;
+    const {data,error}=await supabase.storage.from('nexus-files').createSignedUrl(file.storage_path,60);
+    if(error||!data?.signedUrl){notify('파일 다운로드 링크 생성 실패: '+(error?.message||'오류'));return;}
+    window.open(data.signedUrl,'_blank','noopener,noreferrer');
+  };
+  const deleteWorkspaceFile=async(file:any)=>{
+    if(!supabase||!window.confirm(file.file_name+' 파일을 삭제하시겠습니까?'))return;
+    const removed=await supabase.storage.from('nexus-files').remove([file.storage_path]);
+    if(removed.error){notify('파일 삭제 실패: '+removed.error.message);return;}
+    const row=await supabase.from('workspace_files').delete().eq('id',file.id);
+    if(row.error){notify('파일 정보 삭제 실패: '+row.error.message);return;}
+    setFiles(v=>v.filter(x=>x.id!==file.id));notify('파일을 삭제했습니다.');
   };
 
   return <div className="app-shell">
@@ -343,10 +379,10 @@ function WorkspaceApp() {
         {meetingCreated&&<div className="meeting-active"><div className="meeting-pulse"/><div><strong>새 회의방</strong><small>대기 중 · 실제 통화 연결 전</small></div><button onClick={()=>notify('WebRTC 연결은 다음 단계에서 구현합니다.')}>참여하기</button></div>}
         <div className="meeting-grid"><div className="section-card"><div className="feature-icon"><Video/></div><h3>즉시 회의</h3><p>새 회의 공간을 만들고 팀원을 초대합니다.</p><button onClick={()=>{setMeetingCreated(true);notify('즉시 회의 데모를 생성했습니다.')}}>새 회의 시작</button></div><div className="section-card"><div className="feature-icon"><CalendarDays/></div><h3>예약된 회의</h3><p>일정 연동 기능을 준비하고 있습니다.</p><button onClick={()=>notify('일정 연동은 아직 구현되지 않았습니다.')}>일정 기능 보기</button></div><div className="section-card"><div className="feature-icon"><Headphones/></div><h3>음성 채널</h3><p>채널 기반 음성 대화 기능입니다.</p><button onClick={()=>notify('음성 채널은 WebRTC 서버 연결 후 활성화됩니다.')}>음성 채널 열기</button></div></div>
       </section>:<section className="feature-page">
-        <div className="feature-heading"><div><div className="eyebrow">FILES & DOCUMENTS</div><h1>파일 및 문서</h1><p>이 기기에서 파일을 선택해 현재 화면의 목록에 표시합니다.</p></div><button className="primary-action" onClick={()=>fileInput.current?.click()}><Upload size={16}/> 파일 업로드</button></div>
+        <div className="feature-heading"><div><div className="eyebrow">FILES & DOCUMENTS</div><h1>파일 및 문서</h1><p>워크스페이스 멤버와 파일을 공유합니다. 파일은 비공개 저장소에 보관됩니다.</p></div><button className="primary-action" disabled={filesBusy||!dbReady} onClick={()=>fileInput.current?.click()}><Upload size={16}/> {filesBusy?'업로드 중...':'파일 업로드'}</button></div>
         <input ref={fileInput} type="file" multiple hidden onChange={e=>addFiles(e.target.files)}/>
-        <div className="upload-zone" onClick={()=>fileInput.current?.click()}><FolderOpen size={30}/><strong>파일을 선택하거나 여기를 누르세요</strong><span>선택한 파일은 현재 브라우저 화면에 이름만 표시됩니다. 서버 업로드는 아직 지원하지 않습니다.</span></div>
-        <div className="section-card"><div className="card-title"><FileText size={18}/>최근 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">아직 선택한 파일이 없습니다.</div>:files.map((name,i)=><div className="file-row" key={i}><div className="file-type"><FileText size={17}/></div><div><strong>{name}</strong><small>이 기기에서 선택됨 · 업로드 전</small></div><span className="file-local">로컬</span></div>)}</div>
+        <div className="upload-zone" onClick={()=>!filesBusy&&fileInput.current?.click()}><FolderOpen size={30}/><strong>{filesBusy?'파일을 업로드하고 있습니다':'파일을 선택하거나 여기를 누르세요'}</strong><span>최대 파일 크기 25MB · 로그인한 워크스페이스 멤버만 접근할 수 있습니다.</span></div>
+        <div className="section-card"><div className="card-title"><FileText size={18}/>공유 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">공유된 파일이 없습니다.</div>:files.map(file=><div className="file-row" key={file.id}><div className="file-type"><FileText size={17}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB · {new Date(file.created_at).toLocaleString('ko-KR')}</small></div><button className="secondary-action" onClick={()=>downloadWorkspaceFile(file)}>다운로드</button>{file.uploaded_by===currentUser?.id&&<button className="secondary-action" onClick={()=>deleteWorkspaceFile(file)}>삭제</button>}</div>)}</div>
       </section>}
       <footer className="status-footer"><span><i/>{serverApiReady?"NEXUS 서버 API 연결됨":dbReady?"DB 연결됨 · API 확인 필요":"서버 연결 확인 중"}</span><span>SUPABASE · SEOUL</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
     </main>
