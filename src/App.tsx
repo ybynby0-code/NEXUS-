@@ -18,6 +18,11 @@ function WorkspaceApp() {
   const [workspaceId,setWorkspaceId] = useState<string|null>(null);
   const [channelIds,setChannelIds] = useState<Record<string,string>>({});
   const [dbReady,setDbReady] = useState(false);
+  const [friendSearch,setFriendSearch] = useState('');
+  const [friendResults,setFriendResults] = useState<any[]>([]);
+  const [friendRequests,setFriendRequests] = useState<any[]>([]);
+  const [friends,setFriends] = useState<any[]>([]);
+  const [friendBusy,setFriendBusy] = useState(false);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiAnswer,setAiAnswer] = useState('안녕하세요. NEXUS AI 작업 공간입니다. 현재는 인터페이스 미리보기이며, AI 모델 연결은 다음 개발 단계에서 진행합니다.');
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
@@ -92,6 +97,37 @@ function WorkspaceApp() {
     }).subscribe();
     return()=>{alive=false;supabase.removeChannel(sub)};
   },[dbReady,activeChannel,channelIds,currentUser?.id]);
+  const searchPeople=async()=>{
+    const q=friendSearch.trim();if(!q||!supabase||!currentUser)return;
+    setFriendBusy(true);
+    const {data,error}=await supabase.from('profiles').select('id,display_name,bio').ilike('display_name','%'+q+'%').neq('id',currentUser.id).limit(20);
+    if(error)notify('사용자 검색 실패: '+error.message);else setFriendResults(data||[]);
+    setFriendBusy(false);
+  };
+  const loadFriendData=async()=>{
+    if(!supabase||!currentUser)return;
+    const {data,error}=await supabase.from('friend_requests').select('id,sender_id,recipient_id,status,created_at').or('sender_id.eq.'+currentUser.id+',recipient_id.eq.'+currentUser.id).order('created_at',{ascending:false});
+    if(error){notify('친구 목록 조회 실패: '+error.message);return;}
+    const rows=data||[];const ids=[...new Set(rows.map((r:any)=>r.sender_id===currentUser.id?r.recipient_id:r.sender_id))];
+    const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name,bio').in('id',ids):{data:[]};
+    const byId:Record<string,any>={};(profiles||[]).forEach((p:any)=>byId[p.id]=p);
+    const enriched=rows.map((r:any)=>({...r,person:byId[r.sender_id===currentUser.id?r.recipient_id:r.sender_id]}));
+    setFriendRequests(enriched.filter((r:any)=>r.status==='pending'&&r.recipient_id===currentUser.id));
+    setFriends(enriched.filter((r:any)=>r.status==='accepted').map((r:any)=>r.person).filter(Boolean));
+  };
+  const sendFriendRequest=async(id:string)=>{
+    if(!supabase||!currentUser)return;
+    const {error}=await supabase.from('friend_requests').insert({sender_id:currentUser.id,recipient_id:id});
+    if(error){notify(error.code==='23505'?'이미 요청을 보냈거나 받은 사용자입니다.':'친구 요청 실패: '+error.message);return;}
+    notify('친구 요청을 보냈습니다.');setFriendResults(v=>v.filter(p=>p.id!==id));loadFriendData();
+  };
+  const respondFriendRequest=async(id:string,status:'accepted'|'rejected')=>{
+    if(!supabase)return;
+    const {error}=await supabase.from('friend_requests').update({status,updated_at:new Date().toISOString()}).eq('id',id);
+    if(error){notify('요청 처리 실패: '+error.message);return;}
+    notify(status==='accepted'?'친구 요청을 수락했습니다.':'친구 요청을 거절했습니다.');loadFriendData();
+  };
+  useEffect(()=>{if(section==='community'&&currentUser)loadFriendData()},[section,currentUser?.id]);
   const filteredMessages=useMemo(()=>messages.filter(m=>!searchQuery.trim()||m.text.toLowerCase().includes(searchQuery.toLowerCase())||m.name.toLowerCase().includes(searchQuery.toLowerCase())),[messages,searchQuery]);
 
   const sendMessage=async()=>{
@@ -174,11 +210,22 @@ function WorkspaceApp() {
           <div className="ai-input-wrap"><textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="NEXUS AI에게 요청하기..." rows={2}/><button onClick={askAi} aria-label="AI 요청 전송"><Send size={16}/></button><small>AI API 연결 전 데모 · 실제 답변은 아직 생성되지 않습니다.</small></div>
         </aside>
       </div>:section==='community'?<section className="feature-page">
-        <div className="feature-heading"><div><div className="eyebrow">PEOPLE & COMMUNITY</div><h1>커뮤니티</h1><p>워크스페이스 멤버와 팀을 관리합니다.</p></div><button className="primary-action" onClick={()=>{const name=window.prompt('추가할 멤버의 표시 이름을 입력하세요.');if(name){setMembers(v=>v.includes(name)?v:[...v,name]);notify('멤버 목록에 추가했습니다.')}}}><UserPlus size={16}/> 멤버 추가</button></div>
-        <div className="feature-stats"><div><strong>{members.length}</strong><span>멤버</span></div><div><strong>1</strong><span>워크스페이스</span></div><div><strong>4</strong><span>기본 채널</span></div></div>
-        <div className="section-card"><div className="card-title"><Users size={18}/>멤버 목록 <span>{members.length}명</span></div>{members.map((m,i)=><div className="member-row" key={m}><div className={`avatar ${['violet','blue','green','orange'][i%4]}`}>{m.slice(0,1).toUpperCase()}</div><div><strong>{m}</strong><small>{m==='You'?'내 계정 · 소유자':'워크스페이스 멤버'}</small></div><span className="member-status"><i/>온라인</span></div>)}</div>
-        <div className="invite-box"><div><strong>팀원을 초대하세요</strong><p>현재는 로컬 데모 목록에만 추가됩니다. 실제 초대 링크는 계정 기능 구현 후 제공됩니다.</p></div><div className="invite-controls"><input value={inviteDraft} onChange={e=>setInviteDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addMember()} placeholder="표시 이름 입력"/><button className="primary-action" onClick={addMember}>추가</button></div></div>
-      </section>:section==='meetings'?<section className="feature-page">
+        <div className="feature-heading"><div><div className="eyebrow">PEOPLE & COMMUNITY</div><h1>친구</h1><p>사용자를 검색하고 친구 요청을 관리합니다.</p></div></div>
+        <div className="section-card">
+          <div className="card-title"><UserPlus size={18}/>사용자 찾기</div>
+          <div className="invite-controls friend-search"><input value={friendSearch} onChange={e=>setFriendSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchPeople()} placeholder="표시 이름으로 검색"/><button className="primary-action" onClick={searchPeople} disabled={friendBusy}>{friendBusy?'검색 중':'검색'}</button></div>
+          {friendResults.map(p=><div className="member-row" key={p.id}><div className="avatar violet">{p.display_name.slice(0,1)}</div><div><strong>{p.display_name}</strong><small>{p.bio||'NEXUS 사용자'}</small></div><button className="primary-action" onClick={()=>sendFriendRequest(p.id)}>친구 추가</button></div>)}
+          {friendResults.length===0&&<div className="empty-state">검색어를 입력해 NEXUS 사용자를 찾아보세요.</div>}
+        </div>
+        <div className="section-card"><div className="card-title"><Bell size={18}/>받은 친구 요청 <span>{friendRequests.length}건</span></div>
+          {friendRequests.map(r=><div className="member-row" key={r.id}><div className="avatar blue">{(r.person?.display_name||'U').slice(0,1)}</div><div><strong>{r.person?.display_name||'사용자'}</strong><small>친구 요청</small></div><button className="primary-action" onClick={()=>respondFriendRequest(r.id,'accepted')}>수락</button><button className="secondary-action" onClick={()=>respondFriendRequest(r.id,'rejected')}>거절</button></div>)}
+          {friendRequests.length===0&&<div className="empty-state">새로운 친구 요청이 없습니다.</div>}
+        </div>
+        <div className="section-card"><div className="card-title"><Users size={18}/>내 친구 <span>{friends.length}명</span></div>
+          {friends.map(p=><div className="member-row" key={p.id}><div className="avatar green">{p.display_name.slice(0,1)}</div><div><strong>{p.display_name}</strong><small>{p.bio||'NEXUS 친구'}</small></div><span className="member-status">친구</span></div>)}
+          {friends.length===0&&<div className="empty-state">아직 친구가 없습니다. 위에서 사용자를 검색해 보세요.</div>}
+        </div>
+            </section>:section==='meetings'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>팀 회의와 음성·화상 협업 공간입니다.</p></div><button className="primary-action" onClick={()=>{setMeetingCreated(true);notify('데모 회의방을 생성했습니다.')}}><Video size={16}/> 회의 만들기</button></div>
         {meetingCreated&&<div className="meeting-active"><div className="meeting-pulse"/><div><strong>새 회의방</strong><small>대기 중 · 실제 통화 연결 전</small></div><button onClick={()=>notify('WebRTC 연결은 다음 단계에서 구현합니다.')}>참여하기</button></div>}
         <div className="meeting-grid"><div className="section-card"><div className="feature-icon"><Video/></div><h3>즉시 회의</h3><p>새 회의 공간을 만들고 팀원을 초대합니다.</p><button onClick={()=>{setMeetingCreated(true);notify('즉시 회의 데모를 생성했습니다.')}}>새 회의 시작</button></div><div className="section-card"><div className="feature-icon"><CalendarDays/></div><h3>예약된 회의</h3><p>일정 연동 기능을 준비하고 있습니다.</p><button onClick={()=>notify('일정 연동은 아직 구현되지 않았습니다.')}>일정 기능 보기</button></div><div className="section-card"><div className="feature-icon"><Headphones/></div><h3>음성 채널</h3><p>채널 기반 음성 대화 기능입니다.</p><button onClick={()=>notify('음성 채널은 WebRTC 서버 연결 후 활성화됩니다.')}>음성 채널 열기</button></div></div>
