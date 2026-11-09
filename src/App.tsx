@@ -259,15 +259,39 @@ function AuthGate() {
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
-    supabase.auth.getSession().then(({data}) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    let active = true;
+    let settled = false;
+    const finishLoading = () => {
+      if (active && !settled) {
+        settled = true;
+        setLoading(false);
+      }
+    };
+    // Do not let a slow or blocked mobile-network request keep the page on
+    // the loading screen forever. Auth state can still update afterwards.
+    const timeout = window.setTimeout(finishLoading, 4500);
     const {data:{subscription}} = supabase.auth.onAuthStateChange((_event,next) => {
+      if (!active) return;
       setSession(next);
-      setLoading(false);
+      finishLoading();
     });
-    return () => subscription.unsubscribe();
+    supabase.auth.getSession().then(({data,error}) => {
+      if (!active) return;
+      if (error) console.error('[NEXUS auth session]', error);
+      setSession(data?.session ?? null);
+      finishLoading();
+    }).catch(error => {
+      console.error('[NEXUS auth session]', error);
+      if (active) {
+        setSession(null);
+        finishLoading();
+      }
+    });
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   },[]);
 
   const submit = async (event:FormEvent) => {
