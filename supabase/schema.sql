@@ -319,6 +319,7 @@ end; $$;
 revoke all on function public.accept_workspace_invite(uuid) from public,anon;
 grant execute on function public.accept_workspace_invite(uuid) to authenticated;
 
+create schema if not exists private;
 create or replace function private.is_workspace_admin(p_workspace_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $
  select exists(select 1 from public.workspace_members wm where wm.workspace_id=p_workspace_id and wm.user_id=(select auth.uid()) and wm.role in ('owner','admin'));
