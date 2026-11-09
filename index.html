@@ -8,11 +8,19 @@
     <title>NEXUS — One connected workspace</title>
     <style>
       html,body,#root{margin:0;min-width:320px;min-height:100%;background:#090d18;color:#e8ecf5}
-      #boot{min-height:100dvh;display:grid;place-items:center;font:14px system-ui,sans-serif;color:#c8c2ff}
+      #boot{min-height:100dvh;display:grid;place-items:center;padding:24px;box-sizing:border-box;font:14px system-ui,sans-serif;color:#c8c2ff;text-align:center}
     </style>
   </head>
   <body>
     <div id="root"><div id="boot">NEXUS 화면을 불러오는 중...</div></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      window.setTimeout(function(){
+        var boot=document.getElementById('boot');
+        if(boot){
+          boot.innerHTML='<div><strong style="font-size:20px">NEXUS 앱 실행 실패</strong><p style="color:#aeb8cc;line-height:1.7">화면 스크립트가 실행되지 않았습니다.<br>페이지 주소 또는 스크립트 경로를 확인해야 합니다.</p><button onclick="location.reload()" style="padding:13px 20px;border:0;border-radius:10px;background:#7665e8;color:white;font-weight:700">다시 시도</button></div>';
+        }
+      },10000);
+    </script>
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
