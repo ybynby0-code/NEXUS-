@@ -300,7 +300,7 @@ create policy workspace_invites_select_owner_or_invitee on public.workspace_invi
  or exists(select 1 from public.workspaces w where w.id=workspace_id and w.owner_id=(select auth.uid()))
 );
 revoke insert,update,delete on public.workspace_invites from anon,authenticated;
-create or replace function public.accept_workspace_invite(p_invite_id uuid)
+create or replace function private.accept_workspace_invite(p_invite_id uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_inv public.workspace_invites%rowtype; v_email text;
 begin
@@ -316,6 +316,11 @@ begin
  update public.workspace_invites set status='accepted',accepted_by=auth.uid(),accepted_at=now() where id=p_invite_id;
  return jsonb_build_object('ok',true,'workspace_id',v_inv.workspace_id);
 end; $$;
+revoke all on function private.accept_workspace_invite(uuid) from public,anon;
+grant usage on schema private to authenticated;
+grant execute on function private.accept_workspace_invite(uuid) to authenticated;
+create or replace function public.accept_workspace_invite(p_invite_id uuid)
+returns jsonb language sql security invoker set search_path = '' as $$ select private.accept_workspace_invite(p_invite_id); $$;
 revoke all on function public.accept_workspace_invite(uuid) from public,anon;
 grant execute on function public.accept_workspace_invite(uuid) to authenticated;
 
