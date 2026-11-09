@@ -15,3 +15,6 @@ NEXUS is a mobile-first collaboration workspace.
 4. Never put a Supabase secret/service-role key in browser code.
 
 Authentication and live database operations are not yet wired into the UI. The schema must be reviewed and applied to the selected project before connecting the app.
+
+## GitHub Pages deployment
+This site is built with the `Deploy NEXUS to GitHub Pages` workflow. GitHub Pages source must be set to **GitHub Actions** so the generated `dist/` artifact is published instead of the repository source files.
