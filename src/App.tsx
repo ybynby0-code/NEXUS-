@@ -31,6 +31,7 @@ function WorkspaceApp() {
   const [notifications,setNotifications] = useState<any[]>([]);
   const [profile,setProfile] = useState({display_name:'',bio:'',avatar_url:'',theme_color:'#7867e8'});
   const [profileBusy,setProfileBusy] = useState(false);
+  const [logoutBusy,setLogoutBusy] = useState(false);
   const avatarInput=useRef<HTMLInputElement>(null);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiAnswer,setAiAnswer] = useState('안녕하세요. NEXUS AI 작업 공간입니다. 현재는 인터페이스 미리보기이며, AI 모델 연결은 다음 개발 단계에서 진행합니다.');
@@ -149,6 +150,15 @@ function WorkspaceApp() {
     if(!supabase)return;const at=new Date().toISOString();
     await supabase.from('notifications').update({read_at:at}).eq('id',id);
     setNotifications(v=>v.map(n=>n.id===id?{...n,read_at:at}:n));
+  };
+  const signOut=async()=>{
+    if(!supabase||logoutBusy)return;
+    setLogoutBusy(true);
+    const {error}=await supabase.auth.signOut();
+    setLogoutBusy(false);
+    if(error){notify('로그아웃 실패: '+error.message);return;}
+    setSettingsOpen(false);
+    notify('로그아웃했습니다.');
   };
   const saveProfile=async()=>{
     if(!supabase||!currentUser)return;setProfileBusy(true);
@@ -350,6 +360,7 @@ function WorkspaceApp() {
           <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 저장'}</button>
           <button className="secondary-action full-action" onClick={async()=>{if(!('Notification' in window)){notify('이 브라우저는 알림을 지원하지 않습니다.');return;}const p=await Notification.requestPermission();notify(p==='granted'?'브라우저 알림이 허용되었습니다.':'알림 권한이 허용되지 않았습니다.')}}><Bell size={14}/> 브라우저 알림 허용</button>
           <div className="settings-note">앱이 열려 있을 때 실시간 알림을 받을 수 있습니다. 앱을 닫은 뒤 푸시 알림을 보내려면 푸시 서버 키 설정이 추가로 필요합니다.</div>
+          <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='dm')setSection('dms');if(n.type==='friend_request')setSection('community');setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
     {channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><p>영문, 숫자, 한글, 하이픈을 사용할 수 있습니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
