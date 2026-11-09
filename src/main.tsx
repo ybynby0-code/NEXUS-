@@ -32,3 +32,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <AppErrorBoundary><App /></AppErrorBoundary>
   </React.StrictMode>,
 );
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(error => {
+      console.error('[NEXUS service worker]', error);
+    });
+  });
+}
