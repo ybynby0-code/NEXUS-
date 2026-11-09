@@ -54,3 +54,123 @@
 .profile-mini img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 
 .dm-read-state{display:block;text-align:right;font-size:10px;color:var(--accent,#8b7cf6);margin-top:3px;}
+
+
+/* NEXUS visual cleanup: quieter navigation, consistent spacing, restrained surfaces */
+:root{
+  color-scheme:dark;
+  --nx-bg:#0c111b;
+  --nx-panel:#121a27;
+  --nx-panel-soft:#151f2e;
+  --nx-line:#253246;
+  --nx-muted:#8491a5;
+  --nx-text:#e8edf5;
+  --nx-accent:#8b80e8;
+}
+body{background:var(--nx-bg);color:var(--nx-text)}
+.app-shell{background:var(--nx-bg)}
+/* Remove the duplicate desktop icon rail; keep one clear navigation column. */
+@media(min-width:761px){
+  .nav-rail{display:none}
+  .sidebar{width:224px;flex-basis:224px;padding:22px 14px;background:#0f1724;border-right:1px solid var(--nx-line)}
+}
+.brand-mark{box-shadow:none}
+.workspace-switch{padding:2px 5px 18px}
+.workspace-icon{border-radius:9px;background:#29264b;color:#c9c2ff}
+.sidebar-search,.global-search{border-color:var(--nx-line);background:#111b29;border-radius:9px}
+.side-label{margin:22px 8px 8px;letter-spacing:.7px;color:#738198}
+.side-link,.channel-link{border-radius:9px;padding:10px 11px;font-size:12px;transition:background .15s,color .15s}
+.side-link.selected,.channel-active{background:#24233e;color:#e8e5ff}
+.side-bottom{border-color:var(--nx-line)}
+.topbar{height:56px;flex-basis:56px;padding:0 22px;border-color:var(--nx-line);background:#0e1622}
+.breadcrumbs{font-size:12px}
+.top-actions{gap:8px}
+.global-search{width:205px}
+.icon-button{border-radius:9px}
+.content-grid{grid-template-columns:minmax(0,1fr) 286px}
+.chat-panel{border-color:var(--nx-line)}
+.panel-heading{padding:23px 26px 14px}
+.panel-heading h1{font-size:20px;letter-spacing:-.35px}
+.panel-heading p{font-size:11px;color:var(--nx-muted)}
+.topic-banner{background:#171b2d;border:1px solid #2c2b49;border-radius:10px;color:#b7b2dc;padding:10px 12px}
+.message-list{padding:4px 26px 20px}
+.message-row{gap:11px;margin:15px 0}
+.avatar{border-radius:10px}
+.message-body p{font-size:12px;line-height:1.65;color:#c0cad8}
+.message-meta strong{font-size:12px}
+.composer-wrap{padding:10px 24px 16px}
+.composer{background:#121c2a;border-color:#2b394e;border-radius:11px;height:48px}
+.composer input{font-size:12px}
+.composer-hint{font-size:9px;color:#66758b}
+.ai-panel{background:#101826;border-color:var(--nx-line)}
+.ai-header{height:58px;border-color:var(--nx-line)}
+.ai-content{padding:18px 15px}
+.ai-greeting{padding:8px 0 19px}
+.ai-orb{width:46px;height:46px;border-radius:14px;box-shadow:none}
+.ai-greeting h2{font-size:13px}
+.ai-greeting p{font-size:10px}
+.suggestion{height:38px;background:#151f2e;border-color:#29364a;border-radius:9px;font-size:10px}
+.ai-response{background:#151e2c;border-color:#7770c7;font-size:10px}
+.ai-input-wrap{background:#121c2a;border-color:#2a374b}
+.status-footer{border-color:var(--nx-line);background:#0e1622}
+.feature-page{max-width:1040px;padding:30px clamp(18px,3vw,38px) 36px}
+.feature-heading{margin-bottom:21px}
+.feature-heading h1{font-size:24px;letter-spacing:-.5px}
+.feature-heading p{font-size:11px;color:var(--nx-muted)}
+.section-card{background:#111a27;border:1px solid #263448;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:none}
+.card-title{font-size:12px;padding-bottom:11px;border-color:#263448}
+.primary-action{border:1px solid #7168c5;background:#655bb8;border-radius:9px;padding:9px 13px;font-size:11px}
+.primary-action:hover{background:#766bd0}
+.secondary-action{background:#182435;border-color:#314057;border-radius:8px}
+.member-row,.file-row{padding:10px 2px;border-color:#202d40}
+.member-row strong,.file-row strong{font-size:11px}
+.member-row small,.file-row small{font-size:9px}
+.invite-controls input,.small-modal>input{background:#0d1521;border-color:#2c3a4e;border-radius:9px}
+.settings-note{background:#151f2d;border:1px solid #243247;border-radius:9px}
+.empty-state{color:#7f8da2}
+.dm-layout{gap:12px}
+.dm-list,.dm-chat{border-radius:12px}
+.dm-person{padding:10px;border-radius:9px}
+.dm-person.selected,.dm-person:hover{background:#20253a}
+.dm-bubble{border-radius:13px}
+.meeting-grid{gap:12px}
+.meeting-grid .section-card{padding:17px}
+.meeting-grid p{color:#8d9aaf}
+.upload-zone{background:#121c2a;border-color:#3c4564;border-radius:12px}
+.modal-backdrop{backdrop-filter:blur(8px)}
+.search-modal,.settings-modal,.small-modal{background:#121b29;border-color:#2d3a4e;border-radius:14px}
+.notification-pop{background:#121b29;border-color:#2d3a4e;border-radius:12px}
+
+/* Community is arranged as a compact two-column workspace instead of a long stack. */
+@media(min-width:761px){
+  .feature-page:has(.friend-search){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto auto auto;align-content:start;gap:0 14px}
+  .feature-page:has(.friend-search)>.feature-heading{grid-column:1/-1}
+  .feature-page:has(.friend-search)>.section-card{min-width:0}
+  .feature-page:has(.friend-search)>.section-card:nth-of-type(2){grid-column:1}
+  .feature-page:has(.friend-search)>.section-card:nth-of-type(3){grid-column:2}
+  .feature-page:has(.friend-search)>.section-card:nth-of-type(4){grid-column:1}
+  .feature-page:has(.friend-search)>.section-card:nth-of-type(5){grid-column:2}
+  .feature-page:has(.friend-search)>.section-card:nth-of-type(6){grid-column:1/-1}
+}
+@media(max-width:760px){
+  .app-shell{min-height:0}
+  .nav-rail{width:50px;flex-basis:50px;background:#0a111c;border-color:var(--nx-line)}
+  .sidebar{left:50px;width:min(270px,calc(100vw - 62px));background:#101927}
+  .topbar{padding:0 10px}
+  .breadcrumbs{font-size:11px}
+  .global-search{width:34px}
+  .content-grid{grid-template-columns:minmax(0,1fr)}
+  .panel-heading{padding:16px 14px 12px}
+  .message-list{padding:0 14px 14px}
+  .composer-wrap{padding:8px 12px 12px}
+  .feature-page{padding:20px 13px 28px}
+  .feature-heading{margin-bottom:16px}
+  .feature-heading h1{font-size:21px}
+  .section-card{padding:14px;margin-bottom:10px}
+  .feature-page:has(.friend-search){display:block}
+  .invite-controls{gap:6px}
+  .invite-controls .primary-action{padding:9px 10px}
+  .member-row{gap:8px}
+  .member-row .primary-action,.member-row .secondary-action{padding:7px 8px;font-size:9px}
+  .status-footer{height:28px;flex-basis:28px}
+}
