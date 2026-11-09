@@ -169,7 +169,6 @@ function WorkspaceApp() {
     const load=async()=>{
       const {data,error}=await supabase.from('dm_messages').select('id,sender_id,content,created_at,read_at').eq('conversation_id',activeDm.id).order('created_at').limit(100);
       if(error)throw error;if(alive)setDmMessages(data||[]);
-      await supabase.from('dm_messages').update({read_at:new Date().toISOString()}).eq('conversation_id',activeDm.id).neq('sender_id',currentUser?.id||'').is('read_at',null);
     };
     load().catch(e=>notify('DM 불러오기 실패: '+e.message));
     const sub=supabase.channel('nexus-dm-'+activeDm.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'dm_messages',filter:'conversation_id=eq.'+activeDm.id},(payload:any)=>{if(alive)setDmMessages(v=>v.some(x=>x.id===payload.new.id)?v:[...v,payload.new]);}).subscribe();
