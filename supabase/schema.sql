@@ -89,14 +89,8 @@ create policy "workspaces_delete_owner" on public.workspaces
   for delete to authenticated using (owner_id = (select auth.uid()));
 
 -- Members can see their own membership row. Workspace owners can see all rows in their workspace.
-create policy "workspace_members_select_self_or_owner" on public.workspace_members
-  for select to authenticated using (
-    user_id = (select auth.uid())
-    or exists (
-      select 1 from public.workspaces w
-      where w.id = workspace_id and w.owner_id = (select auth.uid())
-    )
-  );
+create policy "workspace_members_select_self" on public.workspace_members
+  for select to authenticated using (user_id = (select auth.uid()));
 create policy "workspace_members_insert_self_as_owner" on public.workspace_members
   for insert to authenticated with check (
     user_id = (select auth.uid())
@@ -105,14 +99,8 @@ create policy "workspace_members_insert_self_as_owner" on public.workspace_membe
       where w.id = workspace_id and w.owner_id = (select auth.uid())
     )
   );
-create policy "workspace_members_delete_self_or_owner" on public.workspace_members
-  for delete to authenticated using (
-    user_id = (select auth.uid())
-    or exists (
-      select 1 from public.workspaces w
-      where w.id = workspace_id and w.owner_id = (select auth.uid())
-    )
-  );
+create policy "workspace_members_delete_self" on public.workspace_members
+  for delete to authenticated using (user_id = (select auth.uid()));
 
 -- Channel access is restricted to workspace members.
 create policy "channels_select_workspace_member" on public.channels
