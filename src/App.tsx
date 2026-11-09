@@ -301,8 +301,18 @@ function WorkspaceApp() {
     const {data,error}=await supabase.rpc('accept_workspace_invite',{p_invite_id:inviteId});
     if(error){notify('초대 수락 실패: '+error.message);return;}
     notify('워크스페이스에 참여했습니다.');
+    if(data?.workspace_id){
+      const {data:rows,error:channelError}=await supabase.from('channels').select('id,name').eq('workspace_id',data.workspace_id).order('created_at');
+      if(channelError){notify('참여했지만 채널을 불러오지 못했습니다: '+channelError.message);return;}
+      const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
+      setWorkspaceId(data.workspace_id);
+      setChannelIds(map);
+      setChannels((rows||[]).map((c:any)=>c.name));
+      if(rows?.[0])setActiveChannel(rows[0].name);
+      setSection('messages');
+      setMobilePanel('none');
+    }
     await loadWorkspacePeople();
-    if(data?.workspace_id&&!workspaceId){setWorkspaceId(data.workspace_id);}
   };
   const loadWorkspaceFiles=async()=>{
     if(!supabase||!workspaceId)return;
