@@ -424,9 +424,9 @@ function AuthGate() {
   };
 
   if (loading) return <div className="auth-screen"><div className="auth-card">NEXUS 연결 확인 중...</div></div>;
-  if (!isSupabaseConfigured || !supabase) return <div className="auth-screen"><div className="auth-card"><div className="brand-mark">N<span>.</span></div><h1>서버 설정이 필요합니다</h1><p>Supabase 연결 정보를 확인할 수 없습니다.</p></div></div>;
+  if (!isSupabaseConfigured || !supabase) return <div className="auth-screen"><div className="auth-card"><div className="brand-mark">NX<span>•</span></div><h1>서버 설정이 필요합니다</h1><p>Supabase 연결 정보를 확인할 수 없습니다.</p></div></div>;
   if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={submit}>
-    <div className="brand-mark">N<span>.</span></div>
+    <div className="brand-mark">NX<span>•</span></div>
     <div className="eyebrow">YOUR CONNECTED WORKSPACE</div>
     <h1>{mode==='signin'?'NEXUS에 로그인':'NEXUS 계정 만들기'}</h1>
     <p>계정으로 로그인하면 실제 서버 연결 기능을 사용할 수 있습니다.</p>
