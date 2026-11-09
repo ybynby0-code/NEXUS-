@@ -319,6 +319,7 @@ function WorkspaceApp() {
     <aside className={`nav-rail ${mobilePanel==='nav'?'mobile-open':''}`}>
       <div className="brand-mark">N<span>.</span></div>
       <button className={`rail-item ${section==='messages'?'active':''}`} aria-label="메시지" onClick={()=>{setSection('messages');setMobilePanel('none')}}><MessageCircle size={20}/></button>
+      <button className={`rail-item ${section==='dms'?'active':''}`} aria-label="DM" onClick={()=>{setSection('dms');setMobilePanel('none')}}><MessageCircle size={20}/></button>
       <button className={`rail-item ${section==='community'?'active':''}`} aria-label="커뮤니티" onClick={()=>{setSection('community');setMobilePanel('none')}}><Users size={20}/></button>
       <button className={`rail-item ${section==='meetings'?'active':''}`} aria-label="회의" onClick={()=>{setSection('meetings');setMobilePanel('none')}}><Video size={20}/></button>
       <button className={`rail-item ${section==='files'?'active':''}`} aria-label="파일" onClick={()=>{setSection('files');setMobilePanel('none')}}><FileText size={20}/></button>
@@ -333,6 +334,7 @@ function WorkspaceApp() {
       <button className="sidebar-search" onClick={()=>setSearchOpen(true)}><Search size={15}/><span>빠른 검색</span><kbd>Ctrl K</kbd></button>
       <div className="side-label">WORKSPACE <button aria-label="워크스페이스 추가" onClick={()=>notify('워크스페이스 추가 기능은 준비 중입니다.')}><Plus size={15}/></button></div>
       <button className={`side-link ${section==='messages'?'selected':''}`} onClick={()=>setSection('messages')}><MessageCircle size={17}/>메시지 <span className="count">{messages.length}</span></button>
+      <button className={`side-link ${section==='dms'?'selected':''}`} onClick={()=>setSection('dms')}><MessageCircle size={17}/>DM</button>
       <button className={`side-link ${section==='community'?'selected':''}`} onClick={()=>setSection('community')}><Compass size={17}/>커뮤니티</button>
       <button className={`side-link ${section==='meetings'?'selected':''}`} onClick={()=>setSection('meetings')}><Video size={17}/>회의 및 통화</button>
       <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>setSection('files')}><FileText size={17}/>파일 및 문서</button>
@@ -344,7 +346,7 @@ function WorkspaceApp() {
     <main className="main-area">
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
-        <div className="breadcrumbs"><span>Workspace</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':'파일 및 문서'}</strong></div>
+        <div className="breadcrumbs"><span>Workspace</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':'파일 및 문서'}</strong></div>
         <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="활동" onClick={()=>notify('최근 활동이 없습니다.')}><Activity size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
 
