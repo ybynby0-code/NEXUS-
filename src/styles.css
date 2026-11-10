@@ -802,3 +802,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .app-shell[style*="url("] .main-area,.app-shell[style*="url("] .sidebar{background:rgba(11,16,32,.82)!important;backdrop-filter:blur(16px)}
 .app-shell[style*="url("] .section-card,.app-shell[style*="url("] .chat-panel,.app-shell[style*="url("] .dm-chat{background:rgba(255,255,255,.92)}
 .dm-chat-head{min-height:66px;padding:10px 13px;border-radius:10px 10px 0 0;background-color:#151b2a;background-repeat:no-repeat}
+
+
+.dm-chat-head .dm-call-button{flex:0 0 auto;display:flex;align-items:center;gap:6px;margin-left:0}
+.incoming-call-card{display:flex;align-items:center;gap:12px;padding:15px;margin:0 0 14px;border:1px solid #bd623d;background:linear-gradient(120deg,#bd623d22,#202838);border-radius:13px}
+.incoming-call-card>div{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.incoming-call-card strong{font-size:13px;color:var(--nx-ink)}
+.incoming-call-card span{font-size:11px;overflow-wrap:anywhere;color:var(--nx-ink)}
+.incoming-call-card small{font-size:10px;color:var(--nx-muted,#858585)}
+.incoming-call-card button{flex:0 0 auto}
+@media(max-width:520px){.incoming-call-card{flex-wrap:wrap}.incoming-call-card>div{flex:1 1 100%}.incoming-call-card button{flex:1 1 100%;justify-content:center}.dm-chat-head .dm-ping-button,.dm-chat-head .dm-call-button{padding:7px 8px;font-size:9px}}
