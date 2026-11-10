@@ -535,16 +535,6 @@ function WorkspaceApp() {
     }
     const recipients=[...recipientMap.values()];
     setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
-    for(const target of recipients){');
-    for(const member of members){
-      if(member.user_id===currentUser.id)continue;
-      const nickname=String(member.person?.display_name||'').trim();
-      if(!nickname)continue;
-      const exactMention=new RegExp('(^|\\s)@'+escapeRegExp(nickname)+'(?=$|\\s|[.,!?])','i');
-      if(exactMention.test(content))recipientMap.set(member.user_id,{user_id:member.user_id});
-    }
-    const recipients=[...recipientMap.values()];
-    setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
     for(const target of recipients){const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';const body=content.length>140?content.slice(0,137)+'...':content;const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId});if(noticeError){console.warn('[NEXUS mention notification]',noticeError);continue;}try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:target.user_id,title,body,conversation_id:channelId,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)}});if(pushError)console.warn('[NEXUS mention push]',pushError);}catch(e){console.warn('[NEXUS mention push]',e);}}
   };
   const toggleMessageReaction=async(m:ChatMessage,emoji:string)=>{
