@@ -6,7 +6,8 @@ import AdminPanel from './AdminPanel';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2 } from 'lucide-react';
 
 type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
-type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string };
+type ChatReaction = { id:string; emoji:string; user_id:string };
+type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string; parent_message_id?:string|null; pinned_at?:string|null; edited_at?:string|null; reactions?:ChatReaction[] };
 const initialChannels = ['general', 'announcements', 'development', 'random'];
 const initialMessages: ChatMessage[] = [];
 
@@ -20,6 +21,8 @@ function WorkspaceApp() {
   const [workspaceBusy,setWorkspaceBusy] = useState(false);
   const [message,setMessage] = useState('');
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [replyTo,setReplyTo] = useState<ChatMessage|null>(null);
+  const [editingMessageId,setEditingMessageId] = useState<string|null>(null);
   const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string}|null>(null);
   const [adminRole,setAdminRole] = useState<string|null>(null);
   const [workspaceId,setWorkspaceId] = useState<string|null>(null);
@@ -145,15 +148,24 @@ function WorkspaceApp() {
     let alive=true;const channelId=channelIds[activeChannel];
     const load=async()=>{
       setMessages([]);
-      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id') .eq('channel_id',channelId).order('created_at',{ascending:false}).limit(100);
+      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id,parent_message_id,pinned_at,edited_at') .eq('channel_id',channelId).order('created_at',{ascending:false}).limit(100);
       if(error)throw error;
-      const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name').in('id',ids):{data:[]};const names:Record<string,string>={};(profiles||[]).forEach((p:any)=>names[p.id]=p.display_name);if(alive)setMessages([...(data||[])].reverse().map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':names[m.author_id]||'사용자',initials:(m.author_id===currentUser?.id?'나':names[m.author_id]||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
+      const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];const messageIds=(data||[]).map((m:any)=>m.id);
+      const [{data:profiles},{data:reactions}]=await Promise.all([ids.length?supabase.from('profiles').select('id,display_name').in('id',ids):Promise.resolve({data:[]}),messageIds.length?supabase.from('message_reactions').select('id,message_id,emoji,user_id').in('message_id',messageIds):Promise.resolve({data:[]})]);
+      const names:Record<string,string>={};(profiles||[]).forEach((p:any)=>names[p.id]=p.display_name);
+      if(alive)setMessages([...(data||[])].reverse().map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':names[m.author_id]||'사용자',initials:(m.author_id===currentUser?.id?'나':names[m.author_id]||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id,parent_message_id:m.parent_message_id,pinned_at:m.pinned_at,edited_at:m.edited_at,reactions:(reactions||[]).filter((x:any)=>x.message_id===m.id)})));
     };
     load().catch(e=>notify('메시지 조회 실패: '+e.message));
-    const sub=supabase.channel('nexus-'+channelId).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'channel_id=eq.'+channelId},async(payload:any)=>{
-      const m=payload.new;const {data:p}=await supabase.from('profiles').select('display_name').eq('id',m.author_id).maybeSingle();
-      if(alive)setMessages(prev=>prev.some(x=>x.id===m.id)?prev:[...prev,{id:m.id,name:m.author_id===currentUser?.id?'나':p?.display_name||'사용자',initials:(p?.display_name||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id}]);
-    }).subscribe();
+    const sub=supabase.channel('nexus-'+channelId)
+      .on('postgres_changes',{event:'*',schema:'public',table:'messages',filter:'channel_id=eq.'+channelId},async(payload:any)=>{
+        if(payload.eventType==='DELETE'){if(alive)setMessages(prev=>prev.filter(x=>x.id!==payload.old.id));return;}
+        const m=payload.new;const {data:p}=await supabase.from('profiles').select('display_name').eq('id',m.author_id).maybeSingle();
+        if(!alive)return;
+        setMessages(prev=>{const item:ChatMessage={id:m.id,name:m.author_id===currentUser?.id?'나':p?.display_name||'사용자',initials:(p?.display_name||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id,parent_message_id:m.parent_message_id,pinned_at:m.pinned_at,edited_at:m.edited_at,reactions:prev.find(x=>x.id===m.id)?.reactions||[]};return prev.some(x=>x.id===m.id)?prev.map(x=>x.id===m.id?item:x):[...prev,item];});
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'message_reactions'},async()=>{
+        const ids=messages.map(x=>x.id);if(!ids.length)return;const {data}=await supabase.from('message_reactions').select('id,message_id,emoji,user_id').in('message_id',ids);if(alive)setMessages(prev=>prev.map(m=>({...m,reactions:(data||[]).filter((x:any)=>x.message_id===m.id)})));
+      }).subscribe();
     return()=>{alive=false;supabase.removeChannel(sub)};
   },[dbReady,activeChannel,channelIds,currentUser?.id]);
 
@@ -461,10 +473,28 @@ function WorkspaceApp() {
     const content=message.trim();if(!content)return;
     const channelId=channelIds[activeChannel];
     if(!supabase||!currentUser||!channelId){notify('서버 연결이 준비되지 않았습니다.');return;}
-    setMessage('');
-    const {data,error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content}).select('id,content,created_at,author_id').single();
-    if(error){setMessage(content);notify('전송 실패: '+error.message);return;}
-    if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id}]);
+    if(editingMessageId){
+      const target=messages.find(m=>m.id===editingMessageId);if(!target||target.author_id!==currentUser.id){notify('본인이 작성한 메시지만 수정할 수 있습니다.');return;}
+      const {error}=await supabase.from('messages').update({content,edited_at:new Date().toISOString()}).eq('id',editingMessageId).eq('author_id',currentUser.id);
+      if(error){notify('메시지 수정 실패: '+error.message);return;}
+      setMessages(v=>v.map(m=>m.id===editingMessageId?{...m,text:content,edited_at:new Date().toISOString()}:m));setEditingMessageId(null);setMessage('');return;
+    }
+    const {data,error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content,parent_message_id:replyTo?.id||null}).select('id,content,created_at,author_id,parent_message_id').single();
+    if(error){notify('전송 실패: '+error.message);return;}
+    setMessage('');setReplyTo(null);
+    if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute':'2-digit'}),text:data.content,author_id:data.author_id,parent_message_id:data.parent_message_id,reactions:[]}]);
+  };
+  const toggleMessageReaction=async(m:ChatMessage,emoji:string)=>{
+    if(!supabase||!currentUser)return;const existing=(m.reactions||[]).find(x=>x.user_id===currentUser.id&&x.emoji===emoji);
+    if(existing){const {error}=await supabase.from('message_reactions').delete().eq('id',existing.id);if(error){notify('반응 취소 실패: '+error.message);return;}setMessages(v=>v.map(x=>x.id===m.id?{...x,reactions:(x.reactions||[]).filter(r=>r.id!==existing.id)}:x));}
+    else{const {data,error}=await supabase.from('message_reactions').insert({message_id:m.id,user_id:currentUser.id,emoji}).select('id,emoji,user_id').single();if(error){notify('반응 추가 실패: '+error.message);return;}setMessages(v=>v.map(x=>x.id===m.id?{...x,reactions:[...(x.reactions||[]),data]}:x));}
+  };
+  const deleteMessage=async(m:ChatMessage)=>{
+    if(!supabase||!currentUser||m.author_id!==currentUser.id)return;if(!window.confirm('이 메시지를 삭제하시겠습니까?'))return;
+    const {error}=await supabase.from('messages').delete().eq('id',m.id).eq('author_id',currentUser.id);if(error){notify('메시지 삭제 실패: '+error.message);return;}setMessages(v=>v.filter(x=>x.id!==m.id));
+  };
+  const togglePinMessage=async(m:ChatMessage)=>{
+    if(!supabase||!currentUser)return;const pinned=m.pinned_at?null:new Date().toISOString();const {error}=await supabase.from('messages').update({pinned_at:pinned}).eq('id',m.id);if(error){notify('메시지 고정 변경 실패: '+error.message);return;}setMessages(v=>v.map(x=>x.id===m.id?{...x,pinned_at:pinned}:x));
   };
   const askAi=async()=>{
     const prompt=aiPrompt.trim();if(!prompt||!supabase||aiBusy)return;
@@ -690,9 +720,9 @@ function WorkspaceApp() {
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
-            {messages.map(m=><article className="message-row" key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}</div></article>)}
+            {messages.map(m=><article className={`message-row ${m.pinned_at?'message-pinned':''}`} key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.edited_at&&<small className="message-edited">수정됨</small>}{m.pinned_at&&<span className="message-pin-label">📌 고정됨</span>}{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.parent_message_id&&<div className="message-reply-ref">↳ {messages.find(x=>x.id===m.parent_message_id)?.name||'이전 메시지'}에게 답장</div>}{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}<div className="message-actions"><button onClick={()=>{setReplyTo(m);setEditingMessageId(null);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>답장</button>{['👍','❤️','😂','🎉'].map(emoji=><button className={(m.reactions||[]).some(x=>x.user_id===currentUser?.id&&x.emoji===emoji)?'reaction-active':''} key={emoji} onClick={()=>toggleMessageReaction(m,emoji)}>{emoji} {(m.reactions||[]).filter(x=>x.emoji===emoji).length||''}</button>)}<button onClick={()=>togglePinMessage(m)}>{m.pinned_at?'고정 해제':'고정'}</button>{m.author_id===currentUser?.id&&<><button onClick={()=>{setEditingMessageId(m.id);setReplyTo(null);setMessage(m.text);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>수정</button><button className="message-delete" onClick={()=>deleteMessage(m)}>삭제</button></>}</div></div></article>)}
           </div>
-          <div className="composer-wrap"><div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={openAttachDialog}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 서버 저장 및 실시간 동기화</div></div>
+          <div className="composer-wrap">{(replyTo||editingMessageId)&&<div className="composer-context"><span>{editingMessageId?'메시지 수정 중':`${replyTo?.name||'사용자'}에게 답장 중`}</span><button onClick={()=>{setReplyTo(null);setEditingMessageId(null);setMessage('');}}>취소</button></div>}<div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={openAttachDialog}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 서버 저장 및 실시간 동기화</div></div>
         </section>
         <aside className={`ai-panel ${mobilePanel==='ai'?'mobile-ai-open':''}`}>
           <div className="ai-header"><div className="ai-symbol"><Sparkles size={17}/></div><div><strong>NEXUS AI</strong><small>통합 AI 어시스턴트</small></div><button className="icon-button mobile-close" onClick={()=>setMobilePanel('none')} aria-label="닫기"><X size={17}/></button><span className="beta-pill">BETA</span></div>
