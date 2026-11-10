@@ -65,6 +65,7 @@ function WorkspaceApp() {
   const [scheduledMeetings,setScheduledMeetings] = useState<any[]>([]);
   const [outgoingCallCode,setOutgoingCallCode] = useState('');
   const [incomingCallCode,setIncomingCallCode] = useState('');
+  const [pendingOutgoingCall,setPendingOutgoingCall] = useState<any>(null);
   const [meetingTitle,setMeetingTitle] = useState('팀 회의');
   const [meetingTime,setMeetingTime] = useState('');
   const [meetingBusy,setMeetingBusy] = useState(false);
@@ -240,17 +241,21 @@ function WorkspaceApp() {
       notify('이 기기의 시스템 푸시 알림을 등록했습니다.');
     }catch(e:any){notify('푸시 등록 실패: '+(e?.message||'오류'));}
   };
-  const startDirectCall=async()=>{
+  const startDirectCall=()=>{
     if(!supabase||!currentUser||!activeDm?.person?.id)return;
-    const recipient=activeDm.person.id;
     const code=crypto.randomUUID().replace(/-/g,'').slice(0,16).toUpperCase();
     const caller=profile.display_name||currentUser.name;
-    const title='NEXUS 통화 요청';
-    const body=caller+'님이 통화를 요청했습니다. 초대 코드: '+code;
-    const {error}=await supabase.from('notifications').insert({recipient_id:recipient,actor_id:currentUser.id,type:'call',title,body,target_id:activeDm.id});
-    if(error){notify('통화 요청 실패: '+error.message);return;}
+    setPendingOutgoingCall({recipient:activeDm.person.id,conversationId:activeDm.id,code,title:'NEXUS 통화 요청',body:caller+'님이 통화를 요청했습니다. 초대 코드: '+code});
     setOutgoingCallCode(code);setSection('meetings');setMobilePanel('none');
-    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title,body,conversation_id:activeDm.id,url:'./?section=meetings&call='+code}});if(pushError)console.warn('[NEXUS call push]',pushError);}catch(e){console.warn('[NEXUS call push]',e);}
+    notify('통화 연결을 준비하고 있습니다. 마이크 권한을 허용해 주세요.');
+  };
+  const handleOutgoingCallReady=async()=>{
+    const pending=pendingOutgoingCall;
+    if(!supabase||!currentUser||!pending)return;
+    setPendingOutgoingCall(null);
+    const {error}=await supabase.from('notifications').insert({recipient_id:pending.recipient,actor_id:currentUser.id,type:'call',title:pending.title,body:pending.body,target_id:pending.conversationId});
+    if(error){notify('통화방은 열렸지만 초대 알림 전송에 실패했습니다: '+error.message);return;}
+    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:pending.recipient,title:pending.title,body:pending.body,conversation_id:pending.conversationId,url:'./?section=meetings&call='+pending.code}});if(pushError)console.warn('[NEXUS call push]',pushError);}catch(e){console.warn('[NEXUS call push]',e);}
     notify('통화 요청을 보냈습니다. 상대방이 받으면 연결됩니다.');
   };
   const sendPing=async()=>{
@@ -656,7 +661,7 @@ function WorkspaceApp() {
         </div>
             </section>:section==='meetings'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>초대 코드로 연결하는 실시간 1:1 음성·화상 통화입니다.</p></div></div>
-        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')}/>}
+        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')} onOutgoingReady={handleOutgoingCallReady}/>}
         <div className="section-card schedule-card">
           <div className="card-title"><CalendarDays size={18}/>회의 예약</div>
           <div className="schedule-form"><input value={meetingTitle} onChange={e=>setMeetingTitle(e.target.value)} maxLength={120} placeholder="회의 제목"/><input type="datetime-local" value={meetingTime} onChange={e=>setMeetingTime(e.target.value)}/><button className="primary-action" onClick={scheduleMeeting} disabled={meetingBusy||!dbReady}>{meetingBusy?'저장 중...':'일정 추가'}</button></div>
