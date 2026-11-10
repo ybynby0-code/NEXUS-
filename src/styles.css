@@ -580,3 +580,6 @@ body{background:var(--nx-bg);color:var(--nx-ink)}
 
 .ai-input-wrap button:disabled{opacity:.45;cursor:not-allowed}
 .ai-input-wrap small{line-height:1.5}
+
+.message-attachment{display:inline-flex;align-items:center;gap:7px;margin-top:7px;padding:8px 11px;background:#fce8de;border:1px solid #f3c4ad;color:#a94f2d;border-radius:8px;font-size:10px;font-weight:700}
+.message-attachment:hover{background:#f8d8c8}
