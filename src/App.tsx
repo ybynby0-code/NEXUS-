@@ -40,7 +40,8 @@ function WorkspaceApp() {
   const [logoutBusy,setLogoutBusy] = useState(false);
   const avatarInput=useRef<HTMLInputElement>(null);
   const [aiPrompt,setAiPrompt] = useState('');
-  const [aiAnswer,setAiAnswer] = useState('안녕하세요. NEXUS AI 작업 공간입니다. 현재는 인터페이스 미리보기이며, AI 모델 연결은 다음 개발 단계에서 진행합니다.');
+  const [aiBusy,setAiBusy] = useState(false);
+  const [aiAnswer,setAiAnswer] = useState('NEXUS AI 서버가 준비되어 있습니다. AI 제공자 키를 설정하면 실제 답변을 생성합니다.');
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
   const [searchOpen,setSearchOpen] = useState(false);
   const [searchQuery,setSearchQuery] = useState('');
@@ -347,10 +348,23 @@ function WorkspaceApp() {
     if(error){setMessage(content);notify('전송 실패: '+error.message);return;}
     if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id}]);
   };
-  const askAi=()=>{
-    const text=aiPrompt.trim();if(!text)return;
-    setAiAnswer('요청을 받았습니다: “'+text+'”\n\n현재는 화면 동작 확인용 데모입니다. 실제 답변 생성과 외부 서비스 작업은 AI API 및 권한 연동 후 활성화됩니다.');
-    setAiPrompt('');
+  const askAi=async()=>{
+    const prompt=aiPrompt.trim();if(!prompt||!supabase||aiBusy)return;
+    setAiBusy(true);
+    try{
+      const {data,error}=await supabase.functions.invoke('nexus-ai',{body:{prompt}});
+      if(error){
+        let message=error.message;
+        try{const detail=await (error as any).context?.clone?.().json();if(detail?.error)message=detail.error;}catch{}
+        throw new Error(message);
+      }
+      if(!data?.ok)throw new Error(data?.error||'AI 응답을 받지 못했습니다.');
+      setAiAnswer(data.text);setAiPrompt('');
+    }catch(e:any){
+      const message=e?.message||'AI 요청에 실패했습니다.';
+      setAiAnswer('AI 연결 오류: '+message);
+      notify(message);
+    }finally{setAiBusy(false);}
   };
   const addChannel=async()=>{
     const name=channelDraft.trim().toLowerCase().replace(/[^a-z0-9가-힣_-]/g,'-');
@@ -512,7 +526,7 @@ function WorkspaceApp() {
         <aside className={`ai-panel ${mobilePanel==='ai'?'mobile-ai-open':''}`}>
           <div className="ai-header"><div className="ai-symbol"><Sparkles size={17}/></div><div><strong>NEXUS AI</strong><small>통합 AI 어시스턴트</small></div><button className="icon-button mobile-close" onClick={()=>setMobilePanel('none')} aria-label="닫기"><X size={17}/></button><span className="beta-pill">PREVIEW</span></div>
           <div className="ai-content"><div className="ai-greeting"><div className="ai-orb"><Bot size={25}/></div><h2>무엇을 도와드릴까요?</h2><p>대화, 일정, 문서와 연결되는<br/>하나의 AI 작업 공간을 준비하고 있습니다.</p></div><div className="suggestion-title">이렇게 시작해 보세요</div><button className="suggestion" onClick={()=>setAiPrompt('오늘 대화 내용을 요약해 줘')}><MessageCircle size={16}/><span>오늘 대화 요약하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('팀 회의 안건을 작성해 줘')}><CalendarDays size={16}/><span>회의 안건 작성하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('NEXUS 개발 작업을 정리해 줘')}><ShieldCheck size={16}/><span>프로젝트 작업 정리하기</span><span>↗</span></button><div className="ai-response">{aiAnswer}</div></div>
-          <div className="ai-input-wrap"><textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="NEXUS AI에게 요청하기..." rows={2}/><button onClick={askAi} aria-label="AI 요청 전송"><Send size={16}/></button><small>AI API 연결 전 데모 · 실제 답변은 아직 생성되지 않습니다.</small></div>
+          <div className="ai-input-wrap"><textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="NEXUS AI에게 요청하기..." rows={2}/><button onClick={askAi} aria-label="AI 요청 전송" disabled={aiBusy||!aiPrompt.trim()}><Send size={16}/></button><small>{aiBusy?'AI 답변 생성 중...':'서버에서 OpenAI 호환 AI API 호출 · 키는 브라우저에 노출되지 않습니다.'}</small></div>
         </aside>
       </div>:section==='dms'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">PRIVATE CONVERSATIONS</div><h1>다이렉트 메시지</h1><p>친구로 등록된 실제 사용자와 대화합니다.</p></div></div>
