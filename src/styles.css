@@ -1028,3 +1028,77 @@ body{background:var(--nx-bg);color:#f2f3f5}
 .workspace-role-list small{margin-left:auto;color:#aeb3bb;font-size:10px}
 .workspace-role-list button{font-size:10px;padding:6px 9px}
 @media(max-width:520px){.role-create-form{grid-template-columns:minmax(0,1fr) 42px}.role-create-form button{grid-column:1/-1;width:100%}.role-assignment{padding-left:0}.role-permission-grid{gap:9px}}
+
+
+/* NEXUS premium atmosphere — layered depth, restrained glow and readable surfaces */
+.app-shell{
+  position:relative;isolation:isolate;
+  background-color:#090e17;
+  background-repeat:no-repeat;background-attachment:fixed;
+}
+.app-shell:before{
+  content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(ellipse 52% 42% at 78% -8%,rgba(115,99,224,.16),transparent 72%),
+    radial-gradient(ellipse 38% 42% at 5% 100%,rgba(46,112,150,.10),transparent 75%),
+    linear-gradient(135deg,rgba(10,15,24,.22),rgba(8,12,20,.44));
+}
+.main-area{background:transparent;position:relative;isolation:isolate}
+.main-area:before{
+  content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(ellipse 58% 36% at 70% 0%,rgba(105,91,199,.085),transparent 75%),
+    radial-gradient(ellipse 42% 45% at 0% 100%,rgba(38,103,129,.055),transparent 75%);
+}
+.sidebar{background:linear-gradient(180deg,rgba(17,25,38,.97),rgba(12,19,30,.97));backdrop-filter:blur(22px)}
+.topbar,.status-footer{background:rgba(13,20,31,.82);backdrop-filter:blur(18px)}
+.chat-panel{background:rgba(10,15,23,.24)}
+.panel-heading{background:linear-gradient(180deg,rgba(18,26,40,.20),transparent)}
+.topic-banner,.section-card,.dm-list,.dm-chat,.composer,.ai-panel,.settings-modal,.search-modal,.small-modal{
+  backdrop-filter:blur(18px);
+}
+.section-card{background:linear-gradient(145deg,rgba(22,32,47,.88),rgba(15,23,35,.91));border-color:rgba(126,143,172,.17);box-shadow:0 12px 34px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.025)}
+.composer{background:linear-gradient(110deg,rgba(21,31,47,.96),rgba(16,25,39,.96));box-shadow:0 10px 28px rgba(0,0,0,.14)}
+.workspace-icon,.ai-symbol,.feature-icon{box-shadow:inset 0 1px rgba(255,255,255,.10),0 7px 20px rgba(0,0,0,.15)}
+.primary-action{box-shadow:0 5px 18px rgba(105,91,201,.17)}
+.message-row{position:relative}
+.message-row:hover{background:linear-gradient(90deg,rgba(255,255,255,.025),transparent 88%);border-radius:12px}
+.profile-custom-preview{background-color:#182235;background-size:cover;background-position:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06),0 12px 30px rgba(0,0,0,.18)}
+/* User-selectable appearance presets */
+.theme-midnight{background-color:#070a13!important}
+.theme-midnight:before{background:radial-gradient(ellipse 60% 50% at 50% -10%,rgba(70,91,190,.22),transparent 70%),linear-gradient(145deg,rgba(4,7,17,.25),rgba(5,8,17,.56))}
+.theme-midnight .sidebar{background:rgba(7,11,23,.96)}
+.theme-midnight .topbar,.theme-midnight .status-footer{background:rgba(7,11,22,.88)}
+.theme-light{color-scheme:light;background-color:#e9edf5!important;color:#20283a}
+.theme-light .main-area{background:transparent;color:#20283a}
+.theme-light .sidebar{background:rgba(245,247,252,.94);border-color:#d7deea;color:#253047}
+.theme-light .workspace-switch strong,.theme-light .side-link,.theme-light .channel-link{color:#46536a}
+.theme-light .topbar,.theme-light .status-footer{background:rgba(244,247,252,.88);border-color:#d7deea;color:#56647b}
+.theme-light .breadcrumbs strong,.theme-light .panel-heading h1{color:#20283a}
+.theme-light .panel-heading p,.theme-light .feature-heading p{color:#647189}
+.theme-light .chat-panel{color:#20283a}
+.theme-light .section-card,.theme-light .dm-list,.theme-light .dm-chat{background:rgba(249,250,253,.88);border-color:#d9e0eb;color:#263249}
+.theme-light .section-card p,.theme-light .member-row small,.theme-light .file-row small{color:#647189}
+.theme-light .composer{background:rgba(249,250,253,.95);border-color:#cbd5e3}
+.theme-light .composer input{color:#20283a}
+.theme-light .message-body p{color:#45536a}
+.theme-light .message-meta strong{color:#263249}
+.theme-light .topic-banner{background:rgba(239,239,252,.88);border-color:#d9d5f1;color:#5b5684}
+.theme-light .ai-panel{background:rgba(246,248,253,.97);color:#20283a}
+.theme-light .suggestion,.theme-light .ai-input-wrap{background:#eef1f8;border-color:#d8dfeb;color:#46536a}
+.theme-light .ai-greeting p,.theme-light .suggestion-title{color:#66748a}
+.theme-light .profile-editor label{color:#46536a}
+.theme-light .profile-editor input:not([type=color]),.theme-light .profile-editor textarea{background:#f5f7fb;border-color:#cbd5e3;color:#20283a}
+.theme-light .search-modal,.theme-light .settings-modal,.theme-light .small-modal,.theme-light .notification-pop{background:#f7f9fd;border-color:#d4dce8;color:#20283a}
+.theme-light .modal-title h2,.theme-light .settings-modal strong{color:#20283a}
+.theme-light .settings-note{background:#edf1f8;color:#59677d}
+@media(max-width:760px){
+  .app-shell{background-attachment:scroll;background-position:center center}
+  .app-shell:before{background:radial-gradient(ellipse 85% 28% at 80% 0%,rgba(115,99,224,.13),transparent 78%),linear-gradient(145deg,rgba(8,12,21,.26),rgba(8,12,20,.48))}
+  .sidebar{backdrop-filter:blur(24px)}
+  .section-card{box-shadow:0 8px 24px rgba(0,0,0,.12)}
+}
+@media(prefers-reduced-motion:no-preference){
+  .section-card,.dm-list,.dm-chat,.composer,.primary-action{transition:background .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease}
+  .section-card:hover{border-color:rgba(151,139,238,.28);box-shadow:0 15px 38px rgba(0,0,0,.16)}
+}
