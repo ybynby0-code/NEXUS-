@@ -243,8 +243,8 @@ function WorkspaceApp() {
     const recipient=activeDm.person.id;
     const {error}=await supabase.from('notifications').insert({recipient_id:recipient,actor_id:currentUser.id,type:'ping',title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',target_id:activeDm.id});
     if(error){notify('핑 전송 실패: '+error.message);return;}
-    try{await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',conversation_id:activeDm.id,url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)}});}catch(e){console.warn('[NEXUS push]',e);}
-    notify('핑을 보냈습니다.');
+    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',conversation_id:activeDm.id,url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)}});if(pushError)console.warn('[NEXUS push]',pushError);}catch(e){console.warn('[NEXUS push]',e);}
+    notify('핑을 보냈습니다. 푸시 알림을 등록한 기기에서는 앱이 백그라운드여도 시스템 알림이 표시됩니다.');
   };
   useEffect(()=>{
     if(!supabase||!currentUser)return;
