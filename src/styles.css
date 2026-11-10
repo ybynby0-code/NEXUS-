@@ -1237,3 +1237,9 @@ body{background:var(--nx-bg);color:#f2f3f5}
 .call-waiting-card .call-waiting{display:flex;align-items:center;justify-content:center;gap:9px;flex-direction:column}
 .call-controls button.share-active{background:#e9e5ff;border-color:#aaa0f3;color:#5141b5}
 @media(max-width:620px){.call-videos.group-call-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.call-videos.group-call-grid .call-video-card{min-height:120px;aspect-ratio:4/3}.call-controls button{min-width:calc(50% - 8px)}}
+
+
+.message-translation{margin-top:9px;padding:9px 11px;border-left:2px solid #8b7cf0;border-radius:0 8px 8px 0;background:#1b2033;color:#d8d5ff}
+.message-translation>div{display:flex;align-items:center;gap:5px;font-size:9px;color:#a99aff;font-weight:700}
+.message-translation p{margin:5px 0 0;color:#d6d9e6;font-size:11px;line-height:1.7;white-space:pre-wrap}
+.message-actions button:disabled{opacity:.55;cursor:wait}
