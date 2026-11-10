@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import CallRoom from './CallRoom';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
 
 type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files';
@@ -439,7 +440,7 @@ function WorkspaceApp() {
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
             {messages.map(m=><article className="message-row" key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div><p>{m.text}</p></div></article>)}
           </div>
-          <div className="composer-wrap"><div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={()=>{setSection('files');notify('파일 페이지에서 업로드 버튼을 눌러 파일을 선택해 주세요.')}}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 메시지" onClick={()=>notify('음성 메시지는 마이크 권한 및 서버 연결 후 제공됩니다.')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 현재 브라우저 내 데모</div></div>
+          <div className="composer-wrap"><div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={()=>{setSection('files');notify('파일 페이지에서 업로드 버튼을 눌러 파일을 선택해 주세요.')}}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 현재 브라우저 내 데모</div></div>
         </section>
         <aside className={`ai-panel ${mobilePanel==='ai'?'mobile-ai-open':''}`}>
           <div className="ai-header"><div className="ai-symbol"><Sparkles size={17}/></div><div><strong>NEXUS AI</strong><small>통합 AI 어시스턴트</small></div><button className="icon-button mobile-close" onClick={()=>setMobilePanel('none')} aria-label="닫기"><X size={17}/></button><span className="beta-pill">PREVIEW</span></div>
@@ -492,10 +493,9 @@ function WorkspaceApp() {
           {friends.length===0&&<div className="empty-state">아직 친구가 없습니다. 위에서 사용자를 검색해 보세요.</div>}
         </div>
             </section>:section==='meetings'?<section className="feature-page">
-        <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>팀 회의와 음성·화상 협업 공간입니다.</p></div><button className="primary-action" onClick={()=>{setMeetingCreated(true);notify('데모 회의방을 생성했습니다.')}}><Video size={16}/> 회의 만들기</button></div>
-        {meetingCreated&&<div className="meeting-active"><div className="meeting-pulse"/><div><strong>새 회의방</strong><small>대기 중 · 실제 통화 연결 전</small></div><button onClick={()=>notify('WebRTC 연결은 다음 단계에서 구현합니다.')}>참여하기</button></div>}
-        <div className="meeting-grid"><div className="section-card"><div className="feature-icon"><Video/></div><h3>즉시 회의</h3><p>새 회의 공간을 만들고 팀원을 초대합니다.</p><button onClick={()=>{setMeetingCreated(true);notify('즉시 회의 데모를 생성했습니다.')}}>새 회의 시작</button></div><div className="section-card"><div className="feature-icon"><CalendarDays/></div><h3>예약된 회의</h3><p>일정 연동 기능을 준비하고 있습니다.</p><button onClick={()=>notify('일정 연동은 아직 구현되지 않았습니다.')}>일정 기능 보기</button></div><div className="section-card"><div className="feature-icon"><Headphones/></div><h3>음성 채널</h3><p>채널 기반 음성 대화 기능입니다.</p><button onClick={()=>notify('음성 채널은 WebRTC 서버 연결 후 활성화됩니다.')}>음성 채널 열기</button></div></div>
-      </section>:<section className="feature-page">
+        <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>초대 코드로 연결하는 실시간 1:1 음성·화상 통화입니다.</p></div></div>
+        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id}/>}
+            </section>:<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">FILES & DOCUMENTS</div><h1>파일 및 문서</h1><p>워크스페이스 멤버와 파일을 공유합니다. 파일은 비공개 저장소에 보관됩니다.</p></div><button className="primary-action" disabled={filesBusy||!dbReady} onClick={()=>fileInput.current?.click()}><Upload size={16}/> {filesBusy?'업로드 중...':'파일 업로드'}</button></div>
         <input ref={fileInput} type="file" multiple hidden onChange={e=>addFiles(e.target.files)}/>
         <div className="upload-zone" onClick={()=>!filesBusy&&fileInput.current?.click()}><FolderOpen size={30}/><strong>{filesBusy?'파일을 업로드하고 있습니다':'파일을 선택하거나 여기를 누르세요'}</strong><span>최대 파일 크기 25MB · 로그인한 워크스페이스 멤버만 접근할 수 있습니다.</span></div>
