@@ -603,6 +603,13 @@ function WorkspaceApp() {
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
       <div className="side-bottom"><div className="online-dot"/><span>실시간 접속</span><span className="online-text">{onlineCount}명</span></div>
     </aside>
+    <nav className="mobile-bottom-nav" aria-label="주요 메뉴">
+      <button className={section==='messages'?'active':''} onClick={()=>setSection('messages')}><MessageCircle size={19}/><span>채팅</span></button>
+      <button className={section==='dms'?'active':''} onClick={()=>setSection('dms')}><Users size={19}/><span>DM</span></button>
+      <button className={section==='community'?'active':''} onClick={()=>setSection('community')}><Compass size={19}/><span>친구</span></button>
+      <button className={section==='meetings'?'active':''} onClick={()=>setSection('meetings')}><Video size={19}/><span>통화</span></button>
+      <button className={section==='files'?'active':''} onClick={()=>setSection('files')}><FileText size={19}/><span>파일</span></button>
+    </nav>
     <button className={`mobile-scrim ${mobilePanel==='nav'?'visible':''}`} aria-label="메뉴 닫기" onClick={()=>setMobilePanel('none')}/>
 
 
