@@ -215,7 +215,7 @@ function WorkspaceApp() {
   };
   const uploadProfileImage=async(kind:'avatar'|'banner'|'theme',file?:File)=>{
     if(!file||!supabase||!currentUser)return;
-    if(!file.type.startsWith('image/')||file.size>8*1024*1024){notify('이미지 파일(8MB 이하)을 선택해 주세요.');return;}
+    if(!['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)||file.size>5*1024*1024){notify('PNG, JPG, WebP, GIF 이미지(5MB 이하)를 선택해 주세요.');return;}
     const path=currentUser.id+'/'+kind+'-'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
     const {error}=await supabase.storage.from('nexus-avatars').upload(path,file,{upsert:false,contentType:file.type});
     if(error){notify('이미지 업로드 실패: '+error.message);return;}
@@ -680,14 +680,14 @@ function WorkspaceApp() {
     {settingsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSettingsOpen(false)}}><div className="settings-modal"><div className="modal-title"><div><div className="eyebrow">PROFILE & APPEARANCE</div><h2>프로필 및 테마 꾸미기</h2></div><button className="icon-button" onClick={()=>setSettingsOpen(false)}><X/></button></div><div className="profile-editor">
           <div className="profile-custom-preview" style={{backgroundImage:profile.banner_url?`linear-gradient(90deg,#10182788,#10182722),url("${profile.banner_url}")`:undefined,borderColor:profile.theme_color}}><div className={'avatar profile-large decoration-'+profile.profile_decoration}>{profile.avatar_url?<img src={profile.avatar_url}/>:((profile.display_name||currentUser?.name||'N').slice(0,1))}</div><div><strong>{profile.display_name||currentUser?.name||'NEXUS 사용자'}</strong><small>{profile.bio||'상태 메시지를 입력하세요.'}</small></div></div>
           <div className="profile-upload-grid"><button className="secondary-action" onClick={()=>avatarInput.current?.click()}><Upload size={14}/> 프로필 사진</button><button className="secondary-action" onClick={()=>bannerInput.current?.click()}><Upload size={14}/> 프로필 배너</button></div>
-          <input ref={avatarInput} type="file" accept="image/*" hidden onChange={e=>uploadProfileImage('avatar',e.target.files?.[0])}/><input ref={bannerInput} type="file" accept="image/*" hidden onChange={e=>uploadProfileImage('banner',e.target.files?.[0])}/>
+          <input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={e=>uploadProfileImage('avatar',e.target.files?.[0])}/><input ref={bannerInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={e=>uploadProfileImage('banner',e.target.files?.[0])}/>
           <label>표시 이름<input maxLength={40} value={profile.display_name} onChange={e=>setProfile(v=>({...v,display_name:e.target.value}))}/></label>
           <label>소개 및 상태 메시지<textarea maxLength={160} rows={3} value={profile.bio} onChange={e=>setProfile(v=>({...v,bio:e.target.value}))} placeholder="자신을 소개해 보세요."/></label>
           <label>프로필 장식<select value={profile.profile_decoration} onChange={e=>setProfile(v=>({...v,profile_decoration:e.target.value}))}><option value="none">기본</option><option value="glow">네온 글로우</option><option value="ring">컬러 링</option><option value="gold">골드</option></select></label>
           <label>테마 모드<select value={profile.theme_mode} onChange={e=>setProfile(v=>({...v,theme_mode:e.target.value}))}><option value="dark">다크</option><option value="light">라이트</option><option value="midnight">미드나이트</option></select></label>
           <label>포인트 색상<input type="color" value={profile.theme_color} onChange={e=>setProfile(v=>({...v,theme_color:e.target.value}))}/></label>
           <div className="theme-image-row"><div><strong>내 사진으로 배경 만들기</strong><small>직접 촬영한 사진이나 갤러리 이미지를 테마 배경으로 사용합니다.</small></div><button className="secondary-action" onClick={()=>themeImageInput.current?.click()}><Upload size={14}/> 사진 선택</button></div>
-          <input ref={themeImageInput} type="file" accept="image/*" capture="environment" hidden onChange={e=>uploadProfileImage('theme',e.target.files?.[0])}/>
+          <input ref={themeImageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" capture="environment" hidden onChange={e=>uploadProfileImage('theme',e.target.files?.[0])}/>
           {profile.theme_background_url&&<button className="secondary-action full-action" onClick={()=>setProfile(v=>({...v,theme_background_url:''}))}>배경 사진 제거</button>}
           <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 및 테마 저장'}</button>
           <button className="secondary-action full-action" onClick={async()=>{if(!('Notification' in window)){notify('이 브라우저는 알림을 지원하지 않습니다.');return;}const p=await Notification.requestPermission();notify(p==='granted'?'브라우저 알림이 허용되었습니다.':'알림 권한이 허용되지 않았습니다.')}}><Bell size={14}/> 브라우저 알림 허용</button>
