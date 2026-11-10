@@ -417,3 +417,66 @@ for insert to authenticated with check (created_by=(select auth.uid()) and priva
 drop policy if exists scheduled_meetings_delete_creator on public.scheduled_meetings;
 create policy scheduled_meetings_delete_creator on public.scheduled_meetings
 for delete to authenticated using (created_by=(select auth.uid()) or private.is_workspace_admin(workspace_id));
+
+-- Performance-safe policy expressions used by the live project.
+drop policy if exists dm_conversations_select_member on public.dm_conversations;
+create policy dm_conversations_select_member on public.dm_conversations
+for select to authenticated using ((select auth.uid())=member_one or (select auth.uid())=member_two);
+drop policy if exists dm_conversations_insert_friends on public.dm_conversations;
+create policy dm_conversations_insert_friends on public.dm_conversations
+for insert to authenticated with check (
+  ((select auth.uid())=member_one or (select auth.uid())=member_two)
+  and exists (
+    select 1 from public.friend_requests f where f.status='accepted'
+      and ((f.sender_id=dm_conversations.member_one and f.recipient_id=dm_conversations.member_two)
+        or (f.sender_id=dm_conversations.member_two and f.recipient_id=dm_conversations.member_one))
+  )
+);
+drop policy if exists dm_messages_select_member on public.dm_messages;
+create policy dm_messages_select_member on public.dm_messages
+for select to authenticated using (
+  exists(select 1 from public.dm_conversations c where c.id=dm_messages.conversation_id
+    and ((select auth.uid())=c.member_one or (select auth.uid())=c.member_two))
+);
+drop policy if exists dm_messages_insert_sender on public.dm_messages;
+create policy dm_messages_insert_sender on public.dm_messages
+for insert to authenticated with check (
+  sender_id=(select auth.uid())
+  and exists(select 1 from public.dm_conversations c where c.id=dm_messages.conversation_id
+    and ((select auth.uid())=c.member_one or (select auth.uid())=c.member_two))
+);
+drop policy if exists notifications_select_self on public.notifications;
+create policy notifications_select_self on public.notifications
+for select to authenticated using (recipient_id=(select auth.uid()));
+drop policy if exists notifications_update_self on public.notifications;
+create policy notifications_update_self on public.notifications
+for update to authenticated using (recipient_id=(select auth.uid()))
+with check (recipient_id=(select auth.uid()));
+drop policy if exists push_subscriptions_select_self on public.push_subscriptions;
+create policy push_subscriptions_select_self on public.push_subscriptions
+for select to authenticated using (user_id=(select auth.uid()));
+drop policy if exists push_subscriptions_insert_self on public.push_subscriptions;
+create policy push_subscriptions_insert_self on public.push_subscriptions
+for insert to authenticated with check (user_id=(select auth.uid()));
+drop policy if exists push_subscriptions_delete_self on public.push_subscriptions;
+create policy push_subscriptions_delete_self on public.push_subscriptions
+for delete to authenticated using (user_id=(select auth.uid()));
+drop policy if exists workspace_invites_select_owner_or_invitee on public.workspace_invites;
+create policy workspace_invites_select_owner_or_invitee on public.workspace_invites
+for select to authenticated using (
+  lower(email)=lower(coalesce((select auth.jwt())->>'email',''))
+  or exists(select 1 from public.workspace_members wm where wm.workspace_id=workspace_invites.workspace_id
+    and wm.user_id=(select auth.uid()) and wm.role in ('owner','admin'))
+  or exists(select 1 from public.workspaces w where w.id=workspace_invites.workspace_id and w.owner_id=(select auth.uid()))
+);
+
+create index if not exists channels_created_by_idx on public.channels(created_by);
+create index if not exists dm_conversations_member_two_idx on public.dm_conversations(member_two);
+create index if not exists dm_messages_sender_id_idx on public.dm_messages(sender_id);
+create index if not exists notifications_actor_id_idx on public.notifications(actor_id);
+create index if not exists push_subscriptions_user_id_idx on public.push_subscriptions(user_id);
+create index if not exists scheduled_meetings_created_by_idx on public.scheduled_meetings(created_by);
+create index if not exists workspace_files_uploaded_by_idx on public.workspace_files(uploaded_by);
+create index if not exists workspace_invites_accepted_by_idx on public.workspace_invites(accepted_by);
+create index if not exists workspace_invites_invited_by_idx on public.workspace_invites(invited_by);
+create index if not exists workspaces_owner_id_idx on public.workspaces(owner_id);
