@@ -237,10 +237,16 @@ function WorkspaceApp() {
       const subscription=existing||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(publicKey)});
       const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('로그인이 필요합니다.');
       const payload=subscription.toJSON();
-      const {error}=await supabase.from('push_subscriptions').upsert({user_id:user.id,endpoint:subscription.endpoint,subscription:payload},{onConflict:'endpoint'});
+      if(!payload.keys?.p256dh||!payload.keys?.auth)throw new Error('브라우저가 푸시 암호화 키를 반환하지 않았습니다.');
+      const {error}=await supabase.from('push_subscriptions').upsert({
+        user_id:user.id,
+        endpoint:subscription.endpoint,
+        p256dh:payload.keys.p256dh,
+        auth:payload.keys.auth
+      },{onConflict:'endpoint'});
       if(error)throw error;
       notify('이 기기의 시스템 푸시 알림을 등록했습니다.');
-    }catch(e:any){notify('푸시 등록 실패: '+(e?.message||'오류'));}
+    }catch(e:any){console.error('[NEXUS push registration]',e);notify('푸시 등록 실패: '+(e?.message||String(e)||'오류'));}
   };
   const startDirectCall=()=>{
     if(!supabase||!currentUser||!activeDm?.person?.id)return;
