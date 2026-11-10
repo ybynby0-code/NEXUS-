@@ -220,11 +220,12 @@ function WorkspaceApp() {
   };
   const enablePushNotifications=async()=>{
     if(!supabase){notify('서버 연결이 필요합니다.');return;}
-    const publicKey=(import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string|undefined;
-    if(!publicKey){notify('푸시 공개키 설정이 필요합니다. 아직 백그라운드 푸시는 활성화되지 않았습니다.');return;}
     if(!('serviceWorker' in navigator)||!('PushManager' in window)){notify('이 브라우저는 웹 푸시를 지원하지 않습니다.');return;}
     const permission=await Notification.requestPermission();if(permission!=='granted'){notify('시스템 알림 권한을 허용해 주세요.');return;}
     try{
+      const {data:keyData,error:keyError}=await supabase.functions.invoke('nexus-push',{body:{action:'public_key'}});
+      if(keyError||!keyData?.public_key)throw new Error(keyError?.message||'푸시 공개키를 가져오지 못했습니다.');
+      const publicKey=keyData.public_key as string;
       const registration=await navigator.serviceWorker.ready;
       const decode=(value:string)=>{const pad='='.repeat((4-value.length%4)%4);const raw=atob((value+pad).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,c=>c.charCodeAt(0));};
       const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(publicKey)});
