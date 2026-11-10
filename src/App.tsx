@@ -24,6 +24,7 @@ function WorkspaceApp() {
   const [channelIds,setChannelIds] = useState<Record<string,string>>({});
   const [dbReady,setDbReady] = useState(false);
   const [serverApiReady,setServerApiReady] = useState(false);
+  const [onlineCount,setOnlineCount] = useState(0);
   const [friendSearch,setFriendSearch] = useState('');
   const [friendResults,setFriendResults] = useState<any[]>([]);
   const [friendRequests,setFriendRequests] = useState<any[]>([]);
@@ -130,6 +131,18 @@ function WorkspaceApp() {
     }).subscribe();
     return()=>{alive=false;supabase.removeChannel(sub)};
   },[dbReady,activeChannel,channelIds,currentUser?.id]);
+
+  useEffect(()=>{
+    if(!supabase||!currentUser||!workspaceId)return;
+    const presence=supabase.channel('nexus-presence-'+workspaceId,{config:{presence:{key:currentUser.id}}});
+    presence.on('presence',{event:'sync'},()=>setOnlineCount(Object.keys(presence.presenceState()).length));
+    presence.subscribe(async(status:string)=>{
+      if(status==='SUBSCRIBED'){
+        await presence.track({user_id:currentUser.id,name:currentUser.name,online_at:new Date().toISOString()});
+      }
+    });
+    return()=>{setOnlineCount(0);void supabase.removeChannel(presence);};
+  },[currentUser?.id,workspaceId]);
 
   const loadDmConversations=async()=>{
     if(!supabase||!currentUser)return;
@@ -417,7 +430,7 @@ function WorkspaceApp() {
       <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>setSection('files')}><FileText size={17}/>파일 및 문서</button>
       <div className="side-label channels-label">CHANNELS <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
-      <div className="side-bottom"><div className="online-dot"/><span>워크스페이스 상태</span><span className="online-text">온라인</span></div>
+      <div className="side-bottom"><div className="online-dot"/><span>실시간 접속</span><span className="online-text">{onlineCount}명</span></div>
     </aside>
     <button className={`mobile-scrim ${mobilePanel==='nav'?'visible':''}`} aria-label="메뉴 닫기" onClick={()=>setMobilePanel('none')}/>
 
