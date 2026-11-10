@@ -1229,3 +1229,11 @@ body{background:var(--nx-bg);color:#f2f3f5}
 @media(max-width:760px){.top-actions{gap:4px}.fullscreen-toggle{width:32px;height:32px;flex-basis:32px}.app-shell{height:100dvh;min-height:100dvh;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}}
 @media(display-mode:fullscreen){html,body,#root{width:100%;height:100%;overflow:hidden}.app-shell{height:100dvh;min-height:100dvh}}
 @media(display-mode:standalone){html,body,#root{min-height:100%;overscroll-behavior:none}}
+
+
+/* Group call layout and screen-sharing controls */
+.call-videos.group-call-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));align-items:stretch}
+.call-videos.group-call-grid .call-video-card{min-height:170px;aspect-ratio:16/10}
+.call-waiting-card .call-waiting{display:flex;align-items:center;justify-content:center;gap:9px;flex-direction:column}
+.call-controls button.share-active{background:#e9e5ff;border-color:#aaa0f3;color:#5141b5}
+@media(max-width:620px){.call-videos.group-call-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.call-videos.group-call-grid .call-video-card{min-height:120px;aspect-ratio:4/3}.call-controls button{min-width:calc(50% - 8px)}}
