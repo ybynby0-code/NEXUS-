@@ -518,7 +518,23 @@ function WorkspaceApp() {
     for(const selected of mentionSelections){
       if(content.includes(selected.token)&&selected.user_id!==currentUser.id)recipientMap.set(selected.user_id,{user_id:selected.user_id});
     }
-    const escapeRegExp=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\    const recipients=[...new Map(mentionSelections.filter(x=>content.includes(x.token)&&x.user_id!==currentUser.id).map(x=>[x.user_id,x])).values()];setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
+    for(const member of members){
+      if(member.user_id===currentUser.id)continue;
+      const nickname=String(member.person?.display_name||'').trim();
+      if(!nickname)continue;
+      const lowerContent=content.toLocaleLowerCase();
+      const needle='@'+nickname.toLocaleLowerCase();
+      let offset=0;let found=false;
+      while((offset=lowerContent.indexOf(needle,offset))!==-1){
+        const before=offset===0?' ':lowerContent[offset-1];
+        const after=lowerContent[offset+needle.length]||' ';
+        if(/\s/.test(before)&&(/[\s.,!?)]/.test(after))){found=true;break;}
+        offset+=needle.length;
+      }
+      if(found)recipientMap.set(member.user_id,{user_id:member.user_id});
+    }
+    const recipients=[...recipientMap.values()];
+    setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
     for(const target of recipients){');
     for(const member of members){
       if(member.user_id===currentUser.id)continue;
