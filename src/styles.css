@@ -849,3 +849,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .main-area{min-width:0}
 @media(max-width:900px){.admin-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-content-groups{grid-template-columns:1fr}}
 @media(max-width:600px){.admin-page{padding:14px 12px 90px}.admin-heading{align-items:flex-start}.admin-heading>.secondary-action{font-size:11px;padding:8px}.admin-tabs button{padding:9px 11px;font-size:12px}.admin-stat{padding:13px}.admin-stat strong{font-size:22px}.admin-user{align-items:flex-start;flex-wrap:wrap}.admin-user-main{min-width:calc(100% - 58px)}.admin-user-actions{width:100%;padding-left:50px}.admin-user-actions button,.admin-user-actions select{flex:1;min-width:0}.admin-toolbar{align-items:stretch;flex-direction:column}.admin-toolbar label{max-width:none}.main-area{width:100%;max-width:100%}.app-shell{min-height:100dvh;height:100dvh}}
+
+.mobile-bottom-nav{display:none}
+@media(max-width:700px){
+  .mobile-bottom-nav{position:fixed;z-index:35;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(5,1fr);padding:7px 5px calc(7px + env(safe-area-inset-bottom));background:#0b1220f5;border-top:1px solid #2a354b;backdrop-filter:blur(16px)}
+  .mobile-bottom-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:0;background:transparent;color:#8491a8;padding:5px 2px;font-size:10px}
+  .mobile-bottom-nav button.active{color:#b7aaff}
+  .main-area{padding-bottom:62px}
+  .sidebar{padding-bottom:80px}
+}
