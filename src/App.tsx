@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import CallRoom from './CallRoom';
 import AdminPanel from './AdminPanel';
-import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2 } from 'lucide-react';
+import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2 } from 'lucide-react';
 
 type Section = 'home' | 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatReaction = { id:string; emoji:string; user_id:string };
@@ -86,9 +86,31 @@ function WorkspaceApp() {
   const [meetingTime,setMeetingTime] = useState('');
   const [meetingBusy,setMeetingBusy] = useState(false);
   const [toast,setToast] = useState('');
+  const [isFullscreen,setIsFullscreen] = useState(!!document.fullscreenElement);
+  const [isStandalone,setIsStandalone] = useState(window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || (window.navigator as any).standalone===true);
   const fileInput=useRef<HTMLInputElement>(null);
 
   const notify=(text:string)=>{setToast(text);window.setTimeout(()=>setToast(''),2600)};
+  useEffect(()=>{
+    const sync=()=>setIsFullscreen(!!document.fullscreenElement);
+    const standalone=()=>setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || (window.navigator as any).standalone===true);
+    const standaloneQuery=window.matchMedia('(display-mode: standalone)');
+    const fullscreenQuery=window.matchMedia('(display-mode: fullscreen)');
+    document.addEventListener('fullscreenchange',sync);
+    standaloneQuery.addEventListener?.('change',standalone);
+    fullscreenQuery.addEventListener?.('change',standalone);
+    return()=>{document.removeEventListener('fullscreenchange',sync);standaloneQuery.removeEventListener?.('change',standalone);fullscreenQuery.removeEventListener?.('change',standalone);};
+  },[]);
+  const toggleFullscreen=async()=>{
+    if(isStandalone){notify('앱 모드로 실행 중입니다. 브라우저 주소창 없이 표시됩니다.');return;}
+    try{
+      if(document.fullscreenElement){await document.exitFullscreen();return;}
+      const target=document.documentElement as any;
+      if(target.requestFullscreen){await target.requestFullscreen({navigationUI:'hide'});return;}
+      if(target.webkitRequestFullscreen){target.webkitRequestFullscreen();return;}
+      notify('현재 브라우저에서는 전체화면 전환을 지원하지 않습니다. 홈 화면에 추가해 앱으로 실행해 주세요.');
+    }catch(error){console.warn('[NEXUS fullscreen]',error);notify('전체화면은 버튼을 누른 뒤 브라우저 권한이 허용되어야 합니다.');}
+  };
   useEffect(()=>{
     const onKey=(e:KeyboardEvent)=>{
       if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSearchOpen(v=>!v)}
@@ -789,7 +811,7 @@ function WorkspaceApp() {
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
         <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='home'?'홈':section==='messages'?'#'+activeChannel:section==='dms'?'개인 메시지':section==='community'?'친구 및 멤버':section==='meetings'?'음성·영상 통화':section==='admin'?'관리자 센터':'파일 보관함'}</strong></div>
-        <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
+        <div className="top-actions"><button className="icon-button fullscreen-toggle" aria-label={isFullscreen?"전체화면 종료":isStandalone?"앱 전체화면 실행 중":"전체화면"} title={isStandalone?"앱 전체화면 실행 중":isFullscreen?"전체화면 종료":"전체화면"} onClick={toggleFullscreen}><span className="fullscreen-icon">{isFullscreen||isStandalone?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</span></button><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
 
       {section==='home'?<section className="feature-page home-page">
