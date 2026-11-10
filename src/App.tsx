@@ -256,7 +256,22 @@ function WorkspaceApp() {
     setDmDraft('');
     const {data,error}=await supabase.from('dm_messages').insert({conversation_id:activeDm.id,sender_id:currentUser.id,content}).select('id,sender_id,content,created_at,read_at').single();
     if(error){setDmDraft(content);notify('DM 전송 실패: '+error.message);return;}
-    if(data)setDmMessages(v=>v.some(m=>m.id===data.id)?v:[...v,data]);
+    if(data){
+      setDmMessages(v=>v.some(m=>m.id===data.id)?v:[...v,data]);
+      const recipientId=activeDm.member_one===currentUser.id?activeDm.member_two:activeDm.member_one;
+      const senderName=profile.display_name||currentUser.name;
+      const preview=content.length>180?content.slice(0,177)+'…':content;
+      void supabase.functions.invoke('nexus-push',{body:{
+        recipient_id:recipientId,
+        conversation_id:activeDm.id,
+        title:senderName+'님의 새 메시지',
+        body:preview,
+        tag:'nexus-dm-'+data.id,
+        url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)
+      }}).then(({error:pushError})=>{
+        if(pushError)console.warn('[NEXUS DM push]',pushError);
+      }).catch(error=>console.warn('[NEXUS DM push]',error));
+    }
   };
   const loadNotifications=async()=>{
     if(!supabase||!currentUser)return;
@@ -296,8 +311,8 @@ function WorkspaceApp() {
   const enablePushNotifications=async()=>{
     if(!supabase){notify('서버 연결이 필요합니다.');return;}
     if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){notify('이 브라우저는 웹 푸시를 지원하지 않습니다.');return;}
-    const permission=await Notification.requestPermission();if(permission!=='granted'){notify('시스템 알림 권한을 허용해 주세요.');return;}
     try{
+      const permission=await Notification.requestPermission();if(permission!=='granted'){notify('시스템 알림 권한을 허용해 주세요.');return;}
       const {data:keyData,error:keyError}=await supabase.functions.invoke('nexus-push',{body:{action:'public_key'}});
       if(keyError||!keyData?.public_key)throw new Error(keyError?.message||'푸시 공개키를 가져오지 못했습니다.');
       const publicKey=keyData.public_key as string;
@@ -352,7 +367,10 @@ function WorkspaceApp() {
       const callCode=n.type==='call'?(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1]:null;
       const targetUrl=callCode?'./?section=meetings&call='+callCode:'./?section=dms&conversation='+encodeURIComponent(n.target_id||'');
       if('Notification' in window&&Notification.permission==='granted'){
-        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:'nexus-notification-'+(n.target_id||n.id),icon:'./icons/nexus.svg',data:{url:targetUrl}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
+        navigator.serviceWorker?.ready.then(async reg=>{
+          const subscription=await reg.pushManager.getSubscription().catch(()=>null);
+          if(!subscription)await reg.showNotification(n.title,{body:n.body,tag:'nexus-notification-'+(n.target_id||n.id),icon:'./icons/nexus.svg',data:{url:targetUrl},vibrate:[260,100,260,100,420]});
+        }).catch(error=>console.warn('[NEXUS foreground notification]',error));
       }else notify(n.title+': '+n.body);
     }).subscribe();
     return()=>{supabase?.removeChannel(sub);};
@@ -846,8 +864,8 @@ function WorkspaceApp() {
           {profile.theme_background_url&&<button className="secondary-action full-action" onClick={()=>setProfile(v=>({...v,theme_background_url:''}))}>배경 사진 제거</button>}
           <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 및 테마 저장'}</button>
           <button className="secondary-action full-action" onClick={async()=>{if(!('Notification' in window)){notify('이 브라우저는 알림을 지원하지 않습니다.');return;}const p=await Notification.requestPermission();notify(p==='granted'?'브라우저 알림이 허용되었습니다.':'알림 권한이 허용되지 않았습니다.')}}><Bell size={14}/> 브라우저 알림 허용</button>
-          <button className="secondary-action full-action" onClick={enablePushNotifications}><Bell size={14}/> 백그라운드 시스템 푸시 등록</button>
-          <div className="settings-note">브라우저 알림을 허용한 뒤 '백그라운드 시스템 푸시 등록'을 누르세요. 등록된 기기는 앱이 백그라운드에 있어도 핑과 통화 요청을 시스템 알림으로 받습니다. Android 설정에서 NEXUS 알림과 진동도 허용해야 합니다.</div>
+          <button className="secondary-action full-action" onClick={enablePushNotifications}><Bell size={14}/> DM·핑·통화 백그라운드 푸시 등록</button>
+          <div className="settings-note">브라우저 알림을 허용한 뒤 '백그라운드 시스템 푸시 등록'을 누르세요. 등록된 기기는 앱이 백그라운드에 있어도 DM, 핑, 통화 요청을 시스템 알림으로 받습니다. Android 설정에서 NEXUS 알림과 진동도 허용해야 합니다.</div>
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='call'){const code=(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1];if(code)setIncomingCallCode(code.toUpperCase());setSection('meetings');}else if(n.type==='ping'||n.type==='dm'){const conversation=dmConversations.find(c=>c.id===n.target_id);if(conversation)setActiveDm(conversation);setSection('dms');}if(n.type==='friend_request')setSection('community');setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
