@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import CallRoom from './CallRoom';
-import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
+import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
 
 type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files';
 type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string };
@@ -63,6 +63,8 @@ function WorkspaceApp() {
   const [attachableFiles,setAttachableFiles] = useState<any[]>([]);
   const [attachBusy,setAttachBusy] = useState(false);
   const [scheduledMeetings,setScheduledMeetings] = useState<any[]>([]);
+  const [outgoingCallCode,setOutgoingCallCode] = useState('');
+  const [incomingCallCode,setIncomingCallCode] = useState('');
   const [meetingTitle,setMeetingTitle] = useState('팀 회의');
   const [meetingTime,setMeetingTime] = useState('');
   const [meetingBusy,setMeetingBusy] = useState(false);
@@ -167,7 +169,7 @@ function WorkspaceApp() {
     setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
   };
   useEffect(()=>{if(section==='dms'&&currentUser)loadDmConversations();},[section,currentUser?.id]);
-  useEffect(()=>{if(new URLSearchParams(window.location.search).get('section')==='dms')setSection('dms');},[]);
+  useEffect(()=>{const params=new URLSearchParams(window.location.search);const call=params.get('call');if(call&&/^[A-Z0-9]{12,16}$/i.test(call)){setIncomingCallCode(call.toUpperCase());setSection('meetings');window.history.replaceState({},'',window.location.pathname);}else if(params.get('section')==='dms')setSection('dms');},[]);
   useEffect(()=>{const id=new URLSearchParams(window.location.search).get('conversation');if(!id||!dmConversations.length)return;const match=dmConversations.find(c=>c.id===id);if(match){setActiveDm(match);setSection('dms');window.history.replaceState({},'',window.location.pathname);}},[dmConversations]);
 
   const openDm=async(person:any)=>{
@@ -238,6 +240,19 @@ function WorkspaceApp() {
       notify('이 기기의 시스템 푸시 알림을 등록했습니다.');
     }catch(e:any){notify('푸시 등록 실패: '+(e?.message||'오류'));}
   };
+  const startDirectCall=async()=>{
+    if(!supabase||!currentUser||!activeDm?.person?.id)return;
+    const recipient=activeDm.person.id;
+    const code=crypto.randomUUID().replace(/-/g,'').slice(0,16).toUpperCase();
+    const caller=profile.display_name||currentUser.name;
+    const title='NEXUS 통화 요청';
+    const body=caller+'님이 통화를 요청했습니다. 초대 코드: '+code;
+    const {error}=await supabase.from('notifications').insert({recipient_id:recipient,actor_id:currentUser.id,type:'call',title,body,target_id:activeDm.id});
+    if(error){notify('통화 요청 실패: '+error.message);return;}
+    setOutgoingCallCode(code);setSection('meetings');setMobilePanel('none');
+    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title,body,conversation_id:activeDm.id,url:'./?section=meetings&call='+code}});if(pushError)console.warn('[NEXUS call push]',pushError);}catch(e){console.warn('[NEXUS call push]',e);}
+    notify('통화 요청을 보냈습니다. 상대방이 받으면 연결됩니다.');
+  };
   const sendPing=async()=>{
     if(!supabase||!currentUser||!activeDm?.person?.id)return;
     const recipient=activeDm.person.id;
@@ -251,9 +266,11 @@ function WorkspaceApp() {
     loadDmConversations();loadNotifications();
     const sub=supabase.channel('nexus-notifications-'+currentUser.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'recipient_id=eq.'+currentUser.id},(payload:any)=>{
       const n=payload.new;setNotifications(v=>[n,...v]);
-      if(n.type==='ping'&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
+      if((n.type==='ping'||n.type==='call')&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
+      const callCode=n.type==='call'?(n.body.match(/초대 코드:\\s*([A-Z0-9]{12,16})/i)||[])[1]:null;
+      const targetUrl=callCode?'./?section=meetings&call='+callCode:'./?section=dms&conversation='+encodeURIComponent(n.target_id||'');
       if('Notification' in window&&Notification.permission==='granted'){
-        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:n.id,icon:'./icons/nexus.svg',data:{url:'./?section=dms&conversation='+encodeURIComponent(n.target_id||'')}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
+        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:'nexus-notification-'+(n.target_id||n.id),icon:'./icons/nexus.svg',data:{url:targetUrl}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
       }else notify(n.title+': '+n.body);
     }).subscribe();
     return()=>{supabase?.removeChannel(sub);};
@@ -600,7 +617,7 @@ function WorkspaceApp() {
             {!dmConversations.length&&<div className="empty-state">친구를 추가한 뒤 친구 목록에서 DM을 시작하세요.</div>}
           </aside>
           <div className="section-card dm-chat">
-            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className={'avatar violet decoration-'+(activeDm.person?.profile_decoration||'none')} style={activeDm.person?.theme_color?{borderColor:activeDm.person.theme_color}:undefined}>{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button></div>
+            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className={'avatar violet decoration-'+(activeDm.person?.profile_decoration||'none')} style={activeDm.person?.theme_color?{borderColor:activeDm.person.theme_color}:undefined}>{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button><button className="primary-action dm-call-button" onClick={startDirectCall} title="상대방에게 통화 걸기"><Phone size={14}/> 통화</button></div>
               <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time>{m.sender_id===currentUser?.id&&<small className="dm-read-state">{m.read_at?'읽음':'전송됨'}</small>}</div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
               <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
             </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
@@ -639,7 +656,7 @@ function WorkspaceApp() {
         </div>
             </section>:section==='meetings'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>초대 코드로 연결하는 실시간 1:1 음성·화상 통화입니다.</p></div></div>
-        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id}/>}
+        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')}/ >}
         <div className="section-card schedule-card">
           <div className="card-title"><CalendarDays size={18}/>회의 예약</div>
           <div className="schedule-form"><input value={meetingTitle} onChange={e=>setMeetingTitle(e.target.value)} maxLength={120} placeholder="회의 제목"/><input type="datetime-local" value={meetingTime} onChange={e=>setMeetingTime(e.target.value)}/><button className="primary-action" onClick={scheduleMeeting} disabled={meetingBusy||!dbReady}>{meetingBusy?'저장 중...':'일정 추가'}</button></div>
@@ -673,7 +690,7 @@ function WorkspaceApp() {
           <div className="settings-note">앱이 열려 있을 때 실시간 알림을 받을 수 있습니다. 앱을 닫은 뒤 푸시 알림을 보내려면 푸시 서버 키 설정이 추가로 필요합니다.</div>
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
-    {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='dm')setSection('dms');if(n.type==='friend_request')setSection('community');setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
+    {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='call'){const code=(n.body.match(/초대 코드:\\s*([A-Z0-9]{12,16})/i)||[])[1];if(code)setIncomingCallCode(code.toUpperCase());setSection('meetings');}else if(n.type==='ping'||n.type==='dm'){const conversation=dmConversations.find(c=>c.id===n.target_id);if(conversation)setActiveDm(conversation);setSection('dms');}if(n.type==='friend_request')setSection('community');setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
     {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><p>영문, 숫자, 한글, 하이픈을 사용할 수 있습니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
