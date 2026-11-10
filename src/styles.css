@@ -1255,3 +1255,6 @@ body{background:var(--nx-bg);color:#f2f3f5}
 .file-preview-content iframe{width:100%;height:72vh;border:0;background:#fff}
 .file-preview-footer{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid #2b354a}
 @media(max-width:620px){.file-preview-backdrop{padding:3vh 8px 12px}.file-preview-modal{max-height:94vh}.file-preview-content{max-height:78vh}.file-preview-content iframe{height:76vh}}
+
+
+.auto-translate-toggle.active{background:#29234d;color:#b9aaff;box-shadow:inset 0 0 0 1px #7668cf}
