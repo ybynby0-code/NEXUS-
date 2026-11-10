@@ -55,6 +55,8 @@ function WorkspaceApp() {
   const [aiAnswer,setAiAnswer] = useState('NEXUS AI 서버 연결이 준비되어 있습니다. 제공자 키가 등록되면 실제 답변을 생성합니다.');
   const [translatedMessages,setTranslatedMessages] = useState<Record<string,string>>({});
   const [translatingMessageIds,setTranslatingMessageIds] = useState<string[]>([]);
+  const [autoTranslateMessages,setAutoTranslateMessages] = useState(()=>localStorage.getItem('nexus-auto-translate')==='true');
+  const autoTranslatedRef=useRef<Set<string>>(new Set());
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
   const [searchOpen,setSearchOpen] = useState(false);
   const [searchQuery,setSearchQuery] = useState('');
@@ -601,6 +603,14 @@ function WorkspaceApp() {
       notify('메시지 번역 실패: '+(e?.message||'오류'));
     }finally{setTranslatingMessageIds(v=>v.filter(id=>id!==m.id));}
   };
+  useEffect(()=>{localStorage.setItem('nexus-auto-translate',String(autoTranslateMessages));},[autoTranslateMessages]);
+  useEffect(()=>{
+    if(!autoTranslateMessages)return;
+    const latest=messages[messages.length-1];
+    if(!latest?.author_id||latest.author_id===currentUser?.id||autoTranslatedRef.current.has(latest.id)||translatedMessages[latest.id])return;
+    autoTranslatedRef.current.add(latest.id);
+    void translateMessage(latest);
+  },[messages,autoTranslateMessages,currentUser?.id,translatedMessages]);
   const askAi=async()=>{
     const prompt=aiPrompt.trim();if(!prompt||!supabase||aiBusy)return;
     setAiBusy(true);
@@ -873,7 +883,7 @@ function WorkspaceApp() {
         <div className="home-bottom-grid"><div className="section-card"><div className="card-title"><Hash size={18}/>내 채널 <span>{channels.length}개</span></div>{channels.slice(0,6).map(ch=><button className="home-channel-row" key={ch} onClick={()=>{setActiveChannel(ch);setSection('messages')}}><Hash size={15}/><span>{ch}</span><b>열기 →</b></button>)}</div><div className="section-card"><div className="card-title"><CircleHelp size={18}/>처음 사용하시나요?</div><p className="home-help-copy">① 채널을 열어 인사를 남겨보세요.<br/>② 친구 및 멤버 메뉴에서 사람을 찾아보세요.<br/>③ 통화나 파일 공유로 협업을 시작할 수 있습니다.</p><button className="secondary-action" onClick={()=>setSection('community')}>친구 및 멤버 보기</button></div></div>
       </section>:section==='admin'&&adminRole?<AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify}/>:section==='messages'?<div className="content-grid">
         <section className="chat-panel">
-          <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
+          <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className={'icon-button auto-translate-toggle '+(autoTranslateMessages?'active':'')} onClick={()=>setAutoTranslateMessages(v=>!v)} aria-label={autoTranslateMessages?'자동 번역 끄기':'자동 번역 켜기'} aria-pressed={autoTranslateMessages} title={autoTranslateMessages?'새 메시지 자동 번역 켜짐':'새 메시지 자동 번역 꺼짐'}><Languages size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
             {messages.map(m=><article className={`message-row ${m.pinned_at?'message-pinned':''}`} key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.edited_at&&<small className="message-edited">수정됨</small>}{m.pinned_at&&<span className="message-pin-label">📌 고정됨</span>}{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.parent_message_id&&<div className="message-reply-ref">↳ {messages.find(x=>x.id===m.parent_message_id)?.name||'이전 메시지'}에게 답장</div>}{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim().split(/(@[^\s@]+)/g).map((part,i)=>part.startsWith('@')?<strong className="message-mention" key={i}>{part}</strong>:part)}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}{translatedMessages[m.id]&&<div className="message-translation"><div><Languages size={12}/> 한국어 번역</div><p>{translatedMessages[m.id]}</p></div>}<div className="message-actions"><button onClick={()=>translateMessage(m)} disabled={translatingMessageIds.includes(m.id)}>{translatingMessageIds.includes(m.id)?'번역 중...':translatedMessages[m.id]?'번역 숨기기':'한국어 번역'}</button><button onClick={()=>{setReplyTo(m);setEditingMessageId(null);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>답장</button>{['👍','❤️','😂','🎉'].map(emoji=><button className={(m.reactions||[]).some(x=>x.user_id===currentUser?.id&&x.emoji===emoji)?'reaction-active':''} key={emoji} onClick={()=>toggleMessageReaction(m,emoji)}>{emoji} {(m.reactions||[]).filter(x=>x.emoji===emoji).length||''}</button>)}{m.author_id===currentUser?.id&&<button onClick={()=>togglePinMessage(m)}>{m.pinned_at?'고정 해제':'고정'}</button>}{m.author_id===currentUser?.id&&<><button onClick={()=>{setEditingMessageId(m.id);setReplyTo(null);setMessage(m.text);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>수정</button><button className="message-delete" onClick={()=>deleteMessage(m)}>삭제</button></>}</div></div></article>)}
