@@ -527,3 +527,16 @@ body{background:var(--nx-bg);color:var(--nx-ink)}
   .ai-panel{background:#1c211e}
   .status-footer{background:#e9e5dc}
 }
+
+.workspace-switch{width:100%;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer;border-radius:11px}
+.workspace-switch:hover{background:#292f2a}
+.workspace-menu{margin:-14px 0 12px;padding:7px;border:1px solid #3a4239;border-radius:12px;background:#202621;box-shadow:0 15px 35px #0005;display:flex;flex-direction:column;gap:3px;position:relative;z-index:12}
+.workspace-menu>button{border:0;background:transparent;color:#d9ddd2;border-radius:8px;padding:10px;text-align:left;display:flex;align-items:center;justify-content:space-between;font-size:11px;min-height:36px}
+.workspace-menu>button:hover,.workspace-menu>button.active{background:#343b32;color:#fffaf1}
+.workspace-menu>button.active svg{color:#f16b3a}
+.workspace-create{display:flex;gap:5px;padding-top:7px;margin-top:4px;border-top:1px solid #3b4339}
+.workspace-create input{min-width:0;width:100%;height:34px;border:1px solid #465044;background:#171d19;color:#f7f3e9;border-radius:7px;padding:0 8px;font-size:10px;outline:0}
+.workspace-create input::placeholder{color:#8d9588}
+.workspace-create button{width:36px;flex:0 0 36px;border:0;border-radius:7px;background:#f16b3a;color:#211b16;display:grid;place-items:center}
+.workspace-create button:disabled{opacity:.5}
+@media(max-width:760px){.workspace-menu{margin-top:-12px}}
