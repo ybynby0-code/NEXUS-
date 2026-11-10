@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import CallRoom from './CallRoom';
 import AdminPanel from './AdminPanel';
-import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2 } from 'lucide-react';
+import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2, Languages } from 'lucide-react';
 
 type Section = 'home' | 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatReaction = { id:string; emoji:string; user_id:string };
@@ -53,6 +53,8 @@ function WorkspaceApp() {
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiBusy,setAiBusy] = useState(false);
   const [aiAnswer,setAiAnswer] = useState('NEXUS AI 서버 연결이 준비되어 있습니다. 제공자 키가 등록되면 실제 답변을 생성합니다.');
+  const [translatedMessages,setTranslatedMessages] = useState<Record<string,string>>({});
+  const [translatingMessageIds,setTranslatingMessageIds] = useState<string[]>([]);
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
   const [searchOpen,setSearchOpen] = useState(false);
   const [searchQuery,setSearchQuery] = useState('');
@@ -578,11 +580,34 @@ function WorkspaceApp() {
   const togglePinMessage=async(m:ChatMessage)=>{
     if(!supabase||!currentUser)return;const pinned=m.pinned_at?null:new Date().toISOString();const {error}=await supabase.from('messages').update({pinned_at:pinned}).eq('id',m.id);if(error){notify('메시지 고정 변경 실패: '+error.message);return;}setMessages(v=>v.map(x=>x.id===m.id?{...x,pinned_at:pinned}:x));
   };
+  const translateMessage=async(m:ChatMessage)=>{
+    if(translatedMessages[m.id]){
+      setTranslatedMessages(v=>{const next={...v};delete next[m.id];return next;});
+      return;
+    }
+    if(!supabase||translatingMessageIds.includes(m.id))return;
+    const original=m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim();
+    if(!original)return;
+    setTranslatingMessageIds(v=>[...v,m.id]);
+    try{
+      const prompt='다음 채팅 메시지를 자연스럽고 정확한 한국어로 번역하세요. 닉네임, 고유명사, URL, 코드 조각은 임의로 번역하거나 변경하지 말고 번역문만 반환하세요.\n\n'+original;
+      const {data,error}=await supabase.functions.invoke('nexus-ai',{body:{prompt}});
+      if(error)throw new Error(error.message);
+      if(!data?.ok)throw new Error(data?.error||'번역 결과를 받지 못했습니다.');
+      setTranslatedMessages(v=>({...v,[m.id]:String(data.text||'')}));
+    }catch(e:any){
+      notify('메시지 번역 실패: '+(e?.message||'오류'));
+    }finally{setTranslatingMessageIds(v=>v.filter(id=>id!==m.id));}
+  };
   const askAi=async()=>{
     const prompt=aiPrompt.trim();if(!prompt||!supabase||aiBusy)return;
     setAiBusy(true);
     try{
-      const {data,error}=await supabase.functions.invoke('nexus-ai',{body:{prompt}});
+      const context=section==='dms'&&activeDm
+        ?dmMessages.slice(-12).map(m=>({author:m.sender_id===currentUser?.id?'나':activeDm.person?.display_name||'상대방',content:String(m.content||'').slice(0,900)}))
+        :messages.slice(-12).map(m=>({author:m.name,content:String(m.text||'').slice(0,900)}));
+      const contextTitle=section==='dms'?'현재 개인 대화':section==='messages'?'#'+activeChannel+' 채널 대화':'최근 NEXUS 대화';
+      const {data,error}=await supabase.functions.invoke('nexus-ai',{body:{prompt,context,contextTitle}});
       if(error){
         let message=error.message;
         try{const detail=await (error as any).context?.clone?.().json();if(detail?.error)message=detail.error;}catch{}
@@ -839,7 +864,7 @@ function WorkspaceApp() {
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
-            {messages.map(m=><article className={`message-row ${m.pinned_at?'message-pinned':''}`} key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.edited_at&&<small className="message-edited">수정됨</small>}{m.pinned_at&&<span className="message-pin-label">📌 고정됨</span>}{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.parent_message_id&&<div className="message-reply-ref">↳ {messages.find(x=>x.id===m.parent_message_id)?.name||'이전 메시지'}에게 답장</div>}{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim().split(/(@[^\s@]+)/g).map((part,i)=>part.startsWith('@')?<strong className="message-mention" key={i}>{part}</strong>:part)}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}<div className="message-actions"><button onClick={()=>{setReplyTo(m);setEditingMessageId(null);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>답장</button>{['👍','❤️','😂','🎉'].map(emoji=><button className={(m.reactions||[]).some(x=>x.user_id===currentUser?.id&&x.emoji===emoji)?'reaction-active':''} key={emoji} onClick={()=>toggleMessageReaction(m,emoji)}>{emoji} {(m.reactions||[]).filter(x=>x.emoji===emoji).length||''}</button>)}{m.author_id===currentUser?.id&&<button onClick={()=>togglePinMessage(m)}>{m.pinned_at?'고정 해제':'고정'}</button>}{m.author_id===currentUser?.id&&<><button onClick={()=>{setEditingMessageId(m.id);setReplyTo(null);setMessage(m.text);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>수정</button><button className="message-delete" onClick={()=>deleteMessage(m)}>삭제</button></>}</div></div></article>)}
+            {messages.map(m=><article className={`message-row ${m.pinned_at?'message-pinned':''}`} key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.edited_at&&<small className="message-edited">수정됨</small>}{m.pinned_at&&<span className="message-pin-label">📌 고정됨</span>}{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.parent_message_id&&<div className="message-reply-ref">↳ {messages.find(x=>x.id===m.parent_message_id)?.name||'이전 메시지'}에게 답장</div>}{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim().split(/(@[^\s@]+)/g).map((part,i)=>part.startsWith('@')?<strong className="message-mention" key={i}>{part}</strong>:part)}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}{translatedMessages[m.id]&&<div className="message-translation"><div><Languages size={12}/> 한국어 번역</div><p>{translatedMessages[m.id]}</p></div>}<div className="message-actions"><button onClick={()=>translateMessage(m)} disabled={translatingMessageIds.includes(m.id)}>{translatingMessageIds.includes(m.id)?'번역 중...':translatedMessages[m.id]?'번역 숨기기':'한국어 번역'}</button><button onClick={()=>{setReplyTo(m);setEditingMessageId(null);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>답장</button>{['👍','❤️','😂','🎉'].map(emoji=><button className={(m.reactions||[]).some(x=>x.user_id===currentUser?.id&&x.emoji===emoji)?'reaction-active':''} key={emoji} onClick={()=>toggleMessageReaction(m,emoji)}>{emoji} {(m.reactions||[]).filter(x=>x.emoji===emoji).length||''}</button>)}{m.author_id===currentUser?.id&&<button onClick={()=>togglePinMessage(m)}>{m.pinned_at?'고정 해제':'고정'}</button>}{m.author_id===currentUser?.id&&<><button onClick={()=>{setEditingMessageId(m.id);setReplyTo(null);setMessage(m.text);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>수정</button><button className="message-delete" onClick={()=>deleteMessage(m)}>삭제</button></>}</div></div></article>)}
           </div>
           <div className="composer-wrap">{(replyTo||editingMessageId)&&<div className="composer-context"><span>{editingMessageId?'메시지 수정 중':`${replyTo?.name||'사용자'}에게 답장 중`}</span><button onClick={()=>{setReplyTo(null);setEditingMessageId(null);setMessage('');}}>취소</button></div>}<div className="composer-area">{mentionCandidates.length>0&&<div className="mention-suggestions" role="listbox" aria-label="멘션할 멤버">{mentionCandidates.map((member:any)=><button type="button" key={member.user_id} onClick={()=>insertMention(member)}><span className="mention-avatar">{String(member.person?.display_name||'U').slice(0,1)}</span><span><strong>{member.person?.display_name||'사용자'}</strong><small>@{member.person?.display_name||'사용자'} · 워크스페이스 멤버</small></span><b>선택</b></button>)}</div>}<div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={openAttachDialog}><Paperclip size={18}/></button><input value={message} onChange={e=>updateMessageDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){if(mentionCandidates.length){insertMention(mentionCandidates[0]);return;}sendMessage();}}} placeholder={`# ${activeChannel} · @이름으로 멘션`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · @이름을 입력해 멤버를 멘션할 수 있습니다.</div></div></div>
         </section>
