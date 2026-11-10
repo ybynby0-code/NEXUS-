@@ -8,6 +8,7 @@ type Signal = { kind: 'ready'|'offer'|'answer'|'ice'|'leave'; description?: RTCS
 export default function CallRoom({supabase,userId}:Props) {
   const [roomCode,setRoomCode]=useState('');
   const [joinCode,setJoinCode]=useState('');
+  const [createCodeDraft,setCreateCodeDraft]=useState('');
   const [status,setStatus]=useState('회의방을 만들거나 초대 코드를 입력하세요.');
   const [active,setActive]=useState(false);
   const [isCaller,setIsCaller]=useState(false);
@@ -83,7 +84,7 @@ export default function CallRoom({supabase,userId}:Props) {
       activeRef.current=false;setActive(false);
     }
   };
-  const createRoom=()=>connect(crypto.randomUUID().replace(/-/g,'').slice(0,16).toUpperCase(),true);
+  const createRoom=()=>{const custom=createCodeDraft.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(custom&&custom.length<12){setError('예약 코드는 12자 이상이어야 합니다.');return;}void connect(custom||crypto.randomUUID().replace(/-/g,'').slice(0,16).toUpperCase(),true);};
   const joinRoom=()=>{const code=joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length<12){setError('초대 코드를 확인해 주세요.');return;}void connect(code,false);};
   const leave=async()=>{
     await sendSignal({kind:'leave'});
@@ -102,7 +103,7 @@ export default function CallRoom({supabase,userId}:Props) {
     <div className="call-room-status"><span className={active?'call-live-dot':''}/>{status}</div>
     {error&&<div className="call-error">{error}</div>}
     {!active?<div className="call-entry">
-      <div className="call-entry-card"><Video size={24}/><h3>새 1:1 화상 회의</h3><p>회의방을 만든 뒤 8자리 초대 코드를 상대방에게 전달하세요.</p><button className="primary-action" onClick={createRoom} disabled={!supabase}><Phone size={15}/> 회의방 만들기</button></div>
+      <div className="call-entry-card"><Video size={24}/><h3>새 1:1 화상 회의</h3><p>예약 코드를 입력하거나 새 회의방 코드를 자동 생성하세요.</p><input value={createCodeDraft} onChange={e=>setCreateCodeDraft(e.target.value.toUpperCase())} maxLength={16} placeholder="예약 코드 입력 (선택)"/><button className="primary-action" onClick={createRoom} disabled={!supabase}><Phone size={15}/> 회의방 만들기</button></div>
       <div className="call-entry-card"><Phone size={24}/><h3>초대 코드로 참여</h3><p>상대방에게 받은 회의 코드를 입력하세요.</p><input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} maxLength={16} placeholder="16자리 초대 코드"/><button className="secondary-action" onClick={joinRoom} disabled={!supabase}>참여하기</button></div>
     </div>:<>
       <div className="call-code"><span>초대 코드 <strong>{roomCode}</strong></span><button className="secondary-action" onClick={copyCode}><Copy size={14}/> 코드 복사</button></div>
