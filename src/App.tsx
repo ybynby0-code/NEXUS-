@@ -106,8 +106,11 @@ function WorkspaceApp() {
       }
       const {data:workspaceRows,error:workspaceListError}=await supabase.from('workspaces').select('id,name,owner_id').order('created_at');
       if(workspaceListError)throw workspaceListError;
+      const {data:channelRows,error:channelListError}=await supabase.from('channels').select('workspace_id');
+      if(channelListError)throw channelListError;
+      const populatedWorkspaceIds=new Set((channelRows||[]).map((row:any)=>row.workspace_id));
       if(!alive)return;
-      setWorkspaces(workspaceRows||[]);
+      setWorkspaces((workspaceRows||[]).filter((row:any)=>populatedWorkspaceIds.has(row.id)));
       setWorkspaceId(wid!);
       const {data:rows,error:rowsError}=await supabase.from('channels').select('id,name').eq('workspace_id',wid!).order('created_at');
       if(rowsError)throw rowsError;
@@ -375,7 +378,9 @@ function WorkspaceApp() {
       if(channelError){notify('참여했지만 채널을 불러오지 못했습니다: '+channelError.message);return;}
       const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
       const {data:allWorkspaces}=await supabase.from('workspaces').select('id,name,owner_id').order('created_at');
-      setWorkspaces(allWorkspaces||[]);
+      const {data:allChannels}=await supabase.from('channels').select('workspace_id');
+      const populatedIds=new Set((allChannels||[]).map((row:any)=>row.workspace_id));
+      setWorkspaces((allWorkspaces||[]).filter((row:any)=>populatedIds.has(row.id)));
       setWorkspaceId(data.workspace_id);
       setChannelIds(map);
       setChannels((rows||[]).map((c:any)=>c.name));
