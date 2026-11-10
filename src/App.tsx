@@ -167,6 +167,8 @@ function WorkspaceApp() {
     setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
   };
   useEffect(()=>{if(section==='dms'&&currentUser)loadDmConversations();},[section,currentUser?.id]);
+  useEffect(()=>{if(new URLSearchParams(window.location.search).get('section')==='dms')setSection('dms');},[]);
+  useEffect(()=>{const id=new URLSearchParams(window.location.search).get('conversation');if(!id||!dmConversations.length)return;const match=dmConversations.find(c=>c.id===id);if(match){setActiveDm(match);setSection('dms');window.history.replaceState({},'',window.location.pathname);}},[dmConversations]);
 
   const openDm=async(person:any)=>{
     if(!supabase||!currentUser)return;
@@ -241,7 +243,7 @@ function WorkspaceApp() {
     const recipient=activeDm.person.id;
     const {error}=await supabase.from('notifications').insert({recipient_id:recipient,actor_id:currentUser.id,type:'ping',title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',target_id:activeDm.id});
     if(error){notify('핑 전송 실패: '+error.message);return;}
-    try{await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',conversation_id:activeDm.id,url:'./?section=dms'}});}catch(e){console.warn('[NEXUS push]',e);}
+    try{await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',conversation_id:activeDm.id,url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)}});}catch(e){console.warn('[NEXUS push]',e);}
     notify('핑을 보냈습니다.');
   };
   useEffect(()=>{
@@ -251,7 +253,7 @@ function WorkspaceApp() {
       const n=payload.new;setNotifications(v=>[n,...v]);
       if(n.type==='ping'&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
       if('Notification' in window&&Notification.permission==='granted'){
-        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:n.id,icon:'./icons/nexus.svg',data:{url:'./?section=dms'}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
+        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:n.id,icon:'./icons/nexus.svg',data:{url:'./?section=dms&conversation='+encodeURIComponent(n.target_id||'')}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
       }else notify(n.title+': '+n.body);
     }).subscribe();
     return()=>{supabase?.removeChannel(sub);};
