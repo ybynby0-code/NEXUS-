@@ -512,7 +512,23 @@ function WorkspaceApp() {
     if(error){notify('전송 실패: '+error.message);return;}
     setMessage('');setReplyTo(null);setMentionQuery(null);
     if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id,parent_message_id:data.parent_message_id,reactions:[]}]);
-    const recipients=[...new Map(mentionSelections.filter(x=>content.includes(x.token)&&x.user_id!==currentUser.id).map(x=>[x.user_id,x])).values()];setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
+    // Autocomplete selection is authoritative; also resolve manually typed exact @nicknames.
+    // This keeps @nickname notifications working even when the sender does not tap a suggestion.
+    const recipientMap=new Map<string,{user_id:string}>();
+    for(const selected of mentionSelections){
+      if(content.includes(selected.token)&&selected.user_id!==currentUser.id)recipientMap.set(selected.user_id,{user_id:selected.user_id});
+    }
+    const escapeRegExp=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\    const recipients=[...new Map(mentionSelections.filter(x=>content.includes(x.token)&&x.user_id!==currentUser.id).map(x=>[x.user_id,x])).values()];setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
+    for(const target of recipients){');
+    for(const member of members){
+      if(member.user_id===currentUser.id)continue;
+      const nickname=String(member.person?.display_name||'').trim();
+      if(!nickname)continue;
+      const exactMention=new RegExp('(^|\\s)@'+escapeRegExp(nickname)+'(?=$|\\s|[.,!?])','i');
+      if(exactMention.test(content))recipientMap.set(member.user_id,{user_id:member.user_id});
+    }
+    const recipients=[...recipientMap.values()];
+    setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
     for(const target of recipients){const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';const body=content.length>140?content.slice(0,137)+'...':content;const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId});if(noticeError){console.warn('[NEXUS mention notification]',noticeError);continue;}try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:target.user_id,title,body,conversation_id:channelId,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)}});if(pushError)console.warn('[NEXUS mention push]',pushError);}catch(e){console.warn('[NEXUS mention push]',e);}}
   };
   const toggleMessageReaction=async(m:ChatMessage,emoji:string)=>{
