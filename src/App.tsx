@@ -94,7 +94,8 @@ function WorkspaceApp() {
         console.warn('[NEXUS API health check]',apiError);
         if(alive)setServerApiReady(false);
       }
-      const displayName=String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
+      const isDeveloperAccount=String(user.email||'').toLowerCase()==='ybynby0@gmail.com';
+      const displayName=isDeveloperAccount?'레인보우':String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
       if(alive)setCurrentUser({id:user.id,name:displayName,email:user.email||''});
       const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
       const {data:profileRow}=await supabase.from('profiles').select('display_name,bio,avatar_url,theme_color,banner_url,theme_background_url,profile_decoration,theme_mode').eq('id',user.id).maybeSingle();
