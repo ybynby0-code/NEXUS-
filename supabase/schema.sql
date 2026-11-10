@@ -402,7 +402,7 @@ create table if not exists public.scheduled_meetings (
   created_by uuid not null references auth.users(id) on delete cascade,
   title text not null check (char_length(title) between 1 and 120),
   starts_at timestamptz not null,
-  meeting_code text not null unique default upper(substr(replace(gen_random_uuid()::text,'-',''),1,8)),
+  meeting_code text not null unique default upper(substr(replace(gen_random_uuid()::text,'-',''),1,16)),
   created_at timestamptz not null default now()
 );
 create index if not exists scheduled_meetings_workspace_start_idx on public.scheduled_meetings(workspace_id,starts_at);
