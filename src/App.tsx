@@ -7,6 +7,7 @@ import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Comm
 
 type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatReaction = { id:string; emoji:string; user_id:string };
+type WorkspaceRole = {id:string;name:string;color:string;permissions:Record<string,boolean>;position:number};
 type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string; parent_message_id?:string|null; pinned_at?:string|null; edited_at?:string|null; reactions?:ChatReaction[] };
 const initialChannels = ['general', 'announcements', 'development', 'random'];
 const initialMessages: ChatMessage[] = [];
@@ -59,6 +60,9 @@ function WorkspaceApp() {
   const [channelDialog,setChannelDialog] = useState(false);
   const [channelDraft,setChannelDraft] = useState('');
   const [members,setMembers] = useState<any[]>([]);
+  const [workspaceRoles,setWorkspaceRoles] = useState<WorkspaceRole[]>([]);
+  const [roleDraft,setRoleDraft] = useState({name:'',color:'#5865f2',permissions:{manage_channels:false,manage_members:false,manage_messages:false,invite_members:false,manage_roles:false}});
+  const [roleBusy,setRoleBusy] = useState(false);
   const [inviteDraft,setInviteDraft] = useState('');
   const [workspaceInvites,setWorkspaceInvites] = useState<any[]>([]);
   const [inviteBusy,setInviteBusy] = useState(false);
@@ -525,17 +529,37 @@ function WorkspaceApp() {
   };
   const loadWorkspacePeople=async()=>{
     if(!supabase||!workspaceId)return;
-    const [memberResult,inviteResult]=await Promise.all([
+    const [memberResult,inviteResult,roleResult,assignmentResult]=await Promise.all([
       supabase.from('workspace_members').select('user_id,role,joined_at').eq('workspace_id',workspaceId),
-      supabase.from('workspace_invites').select('id,email,status,expires_at,created_at,workspace_id').order('created_at',{ascending:false}).limit(100)
+      supabase.from('workspace_invites').select('id,email,status,expires_at,created_at,workspace_id').order('created_at',{ascending:false}).limit(100),
+      supabase.from('workspace_roles').select('id,name,color,permissions,position').eq('workspace_id',workspaceId).order('position',{ascending:false}),
+      supabase.from('workspace_member_roles').select('user_id,role_id').eq('workspace_id',workspaceId)
     ]);
     if(memberResult.error){notify('멤버 조회 실패: '+memberResult.error.message);return;}
+    if(roleResult.error||assignmentResult.error){notify('역할 조회 실패: '+(roleResult.error?.message||assignmentResult.error?.message));return;}
     const ids=(memberResult.data||[]).map((m:any)=>m.user_id);
     const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url').in('id',ids):{data:[]};
     const byId:Record<string,any>={};(profiles||[]).forEach((p:any)=>byId[p.id]=p);
-    setMembers((memberResult.data||[]).map((m:any)=>({...m,person:byId[m.user_id]})));
+    const assigned:Record<string,string[]>={};(assignmentResult.data||[]).forEach((x:any)=>{(assigned[x.user_id]??=[]).push(x.role_id)});
+    setWorkspaceRoles((roleResult.data||[]) as WorkspaceRole[]);
+    setMembers((memberResult.data||[]).map((m:any)=>({...m,person:byId[m.user_id],role_ids:assigned[m.user_id]||[]})));
     if(inviteResult.error){notify('초대 목록 조회 실패: '+inviteResult.error.message);return;}
     setWorkspaceInvites(inviteResult.data||[]);
+  };
+  const createWorkspaceRole=async()=>{
+    const name=roleDraft.name.trim();if(!name||!supabase||!workspaceId||roleBusy)return;
+    setRoleBusy(true);
+    const {error}=await supabase.from('workspace_roles').insert({workspace_id:workspaceId,name,color:roleDraft.color,permissions:roleDraft.permissions,position:workspaceRoles.length,created_by:currentUser?.id});
+    setRoleBusy(false);if(error){notify('역할 생성 실패: '+error.message);return;}
+    setRoleDraft(v=>({...v,name:''}));notify('새 역할을 만들었습니다.');await loadWorkspacePeople();
+  };
+  const assignWorkspaceRole=async(userId:string,roleId:string,checked:boolean)=>{
+    if(!supabase||!workspaceId||!currentUser)return;
+    const result=checked
+      ?await supabase.from('workspace_member_roles').insert({workspace_id:workspaceId,user_id:userId,role_id:roleId,assigned_by:currentUser.id})
+      :await supabase.from('workspace_member_roles').delete().eq('workspace_id',workspaceId).eq('user_id',userId).eq('role_id',roleId);
+    if(result.error){notify('역할 변경 실패: '+result.error.message);return;}
+    await loadWorkspacePeople();notify('멤버 역할을 업데이트했습니다.');
   };
   useEffect(()=>{if(dbReady&&workspaceId)loadWorkspacePeople()},[dbReady,workspaceId]);
   const addMember=async()=>{
@@ -747,8 +771,15 @@ function WorkspaceApp() {
         <div className="feature-heading"><div><div className="eyebrow">PEOPLE & COMMUNITY</div><h1>친구</h1><p>사용자를 검색하고 친구 요청을 관리합니다.</p></div></div>
         <div className="section-card">
           <div className="card-title"><Users size={18}/>워크스페이스 멤버 <span>{members.length}명</span></div>
-          {members.map(m=><div className="member-row" key={m.user_id}><div className="avatar violet">{(m.person?.display_name||'U').slice(0,1)}</div><div><strong>{m.person?.display_name||'사용자'}</strong><small>{m.role==='owner'?'소유자':m.role==='admin'?'관리자':'멤버'}</small></div></div>)}
+          {members.map(m=><div className="member-row role-member-row" key={m.user_id}><div className="avatar violet">{(m.person?.display_name||'U').slice(0,1)}</div><div className="role-member-main"><strong>{m.person?.display_name||'사용자'}</strong><small>{m.role==='owner'?'소유자':m.role==='admin'?'관리자':'멤버'}{(m.role_ids||[]).map((id:string)=>workspaceRoles.find(r=>r.id===id)?.name).filter(Boolean).map((n:string)=><span className="role-chip" key={n}>{n}</span>)}</small></div>{members.some(x=>x.user_id===currentUser?.id&&['owner','admin'].includes(x.role))&&m.role!=='owner'&&<div className="role-assignment">{workspaceRoles.map(role=><label key={role.id}><input type="checkbox" checked={(m.role_ids||[]).includes(role.id)} onChange={e=>assignWorkspaceRole(m.user_id,role.id,e.target.checked)}/><i style={{background:role.color}}/>{role.name}</label>)}</div>}</div>)}
         </div>
+        {members.some(x=>x.user_id===currentUser?.id&&['owner','admin'].includes(x.role))&&<div className="section-card">
+          <div className="card-title"><ShieldCheck size={18}/>서버 역할 및 권한</div>
+          <p className="settings-note">역할을 만들고 멤버에게 여러 역할을 부여할 수 있습니다. 소유자와 관리자는 모든 권한을 가집니다.</p>
+          <div className="role-create-form"><input aria-label="역할 이름" maxLength={32} placeholder="예: 모더레이터" value={roleDraft.name} onChange={e=>setRoleDraft(v=>({...v,name:e.target.value}))}/><input aria-label="역할 색상" type="color" value={roleDraft.color} onChange={e=>setRoleDraft(v=>({...v,color:e.target.value}))}/><button className="primary-action" disabled={roleBusy||!roleDraft.name.trim()} onClick={createWorkspaceRole}>{roleBusy?'생성 중...':'역할 만들기'}</button></div>
+          <div className="role-permission-grid">{[{key:'manage_channels',label:'채널 관리'},{key:'manage_members',label:'멤버 관리'},{key:'manage_messages',label:'메시지 관리'},{key:'invite_members',label:'멤버 초대'},{key:'manage_roles',label:'역할 관리'}].map(p=><label key={p.key}><input type="checkbox" checked={!!roleDraft.permissions[p.key as keyof typeof roleDraft.permissions]} onChange={e=>setRoleDraft(v=>({...v,permissions:{...v.permissions,[p.key]:e.target.checked}}))}/>{p.label}</label>)}</div>
+          <div className="workspace-role-list">{workspaceRoles.map(role=><div key={role.id}><span className="role-color-dot" style={{background:role.color}}/><strong>{role.name}</strong><small>{Object.entries(role.permissions).filter(([,v])=>v).length}개 권한</small><button className="secondary-action" onClick={async()=>{if(!window.confirm(role.name+' 역할을 삭제하시겠습니까?'))return;const {error}=await supabase!.from('workspace_roles').delete().eq('id',role.id);if(error){notify('역할 삭제 실패: '+error.message);return;}await loadWorkspacePeople();}}>삭제</button></div>)}</div>
+        </div>}
         <div className="section-card join-link-card">
           <div className="card-title"><Link2 size={18}/>서버 초대 링크</div>
           <p className="settings-note">링크를 받은 사람은 로그인한 뒤 서버에 참여하고 공개 채널을 볼 수 있습니다. 링크는 7일 후 만료됩니다.</p>
