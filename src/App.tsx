@@ -56,6 +56,10 @@ function WorkspaceApp() {
   const [inviteBusy,setInviteBusy] = useState(false);
   const [files,setFiles] = useState<any[]>([]);
   const [filesBusy,setFilesBusy] = useState(false);
+  const [scheduledMeetings,setScheduledMeetings] = useState<any[]>([]);
+  const [meetingTitle,setMeetingTitle] = useState('팀 회의');
+  const [meetingTime,setMeetingTime] = useState('');
+  const [meetingBusy,setMeetingBusy] = useState(false);
   const [toast,setToast] = useState('');
   const fileInput=useRef<HTMLInputElement>(null);
 
@@ -380,6 +384,32 @@ function WorkspaceApp() {
       setMobilePanel('none');
     }
   };
+  const loadScheduledMeetings=async()=>{
+    if(!supabase||!workspaceId)return;
+    const {data,error}=await supabase.from('scheduled_meetings').select('id,title,starts_at,meeting_code,created_by,created_at').eq('workspace_id',workspaceId).order('starts_at',{ascending:true}).limit(100);
+    if(error){notify('회의 일정 조회 실패: '+error.message);return;}
+    setScheduledMeetings(data||[]);
+  };
+  useEffect(()=>{if(section==='meetings'&&workspaceId)loadScheduledMeetings();},[section,workspaceId]);
+  const scheduleMeeting=async()=>{
+    const title=meetingTitle.trim();const startsAt=new Date(meetingTime);
+    if(!title){notify('회의 제목을 입력해 주세요.');return;}
+    if(!meetingTime||Number.isNaN(startsAt.getTime())||startsAt.getTime()<=Date.now()){notify('현재보다 나중인 회의 시간을 선택해 주세요.');return;}
+    if(!supabase||!workspaceId||!currentUser||meetingBusy)return;
+    setMeetingBusy(true);
+    const {data,error}=await supabase.from('scheduled_meetings').insert({workspace_id:workspaceId,created_by:currentUser.id,title,starts_at:startsAt.toISOString()}).select('id,title,starts_at,meeting_code,created_by,created_at').single();
+    setMeetingBusy(false);
+    if(error){notify('회의 예약 실패: '+error.message);return;}
+    setScheduledMeetings(v=>[...v,data].sort((a,b)=>new Date(a.starts_at).getTime()-new Date(b.starts_at).getTime()));
+    setMeetingTime('');notify('회의를 예약했습니다.');
+  };
+  const cancelScheduledMeeting=async(id:string)=>{
+    if(!supabase||!window.confirm('이 회의 예약을 취소하시겠습니까?'))return;
+    const {error}=await supabase.from('scheduled_meetings').delete().eq('id',id);
+    if(error){notify('회의 취소 실패: '+error.message);return;}
+    setScheduledMeetings(v=>v.filter(m=>m.id!==id));notify('회의 예약을 취소했습니다.');
+  };
+
   const loadWorkspaceFiles=async()=>{
     if(!supabase||!workspaceId)return;
     const {data,error}=await supabase.from('workspace_files').select('id,file_name,mime_type,size_bytes,storage_path,uploaded_by,created_at').eq('workspace_id',workspaceId).order('created_at',{ascending:false}).limit(100);
@@ -507,6 +537,11 @@ function WorkspaceApp() {
             </section>:section==='meetings'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>초대 코드로 연결하는 실시간 1:1 음성·화상 통화입니다.</p></div></div>
         {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id}/>}
+        <div className="section-card schedule-card">
+          <div className="card-title"><CalendarDays size={18}/>회의 예약</div>
+          <div className="schedule-form"><input value={meetingTitle} onChange={e=>setMeetingTitle(e.target.value)} maxLength={120} placeholder="회의 제목"/><input type="datetime-local" value={meetingTime} onChange={e=>setMeetingTime(e.target.value)}/><button className="primary-action" onClick={scheduleMeeting} disabled={meetingBusy||!dbReady}>{meetingBusy?'저장 중...':'일정 추가'}</button></div>
+          <div className="scheduled-list">{scheduledMeetings.map(m=><div className="scheduled-row" key={m.id}><div><strong>{m.title}</strong><small>{new Date(m.starts_at).toLocaleString('ko-KR')} · 코드 {m.meeting_code}</small></div><button className="secondary-action" onClick={async()=>{try{await navigator.clipboard.writeText(m.meeting_code);notify('회의 코드를 복사했습니다.')}catch{window.prompt('회의 코드',m.meeting_code)}}}><Copy size={14}/> 코드 복사</button>{m.created_by===currentUser?.id&&<button className="secondary-action" onClick={()=>cancelScheduledMeeting(m.id)}>취소</button>}</div>)}{scheduledMeetings.length===0&&<div className="empty-state">예약된 회의가 없습니다.</div>}</div>
+        </div>
             </section>:<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">FILES & DOCUMENTS</div><h1>파일 및 문서</h1><p>워크스페이스 멤버와 파일을 공유합니다. 파일은 비공개 저장소에 보관됩니다.</p></div><button className="primary-action" disabled={filesBusy||!dbReady} onClick={()=>fileInput.current?.click()}><Upload size={16}/> {filesBusy?'업로드 중...':'파일 업로드'}</button></div>
         <input ref={fileInput} type="file" multiple hidden onChange={e=>addFiles(e.target.files)}/>
