@@ -57,6 +57,9 @@ function WorkspaceApp() {
   const [inviteBusy,setInviteBusy] = useState(false);
   const [files,setFiles] = useState<any[]>([]);
   const [filesBusy,setFilesBusy] = useState(false);
+  const [attachDialogOpen,setAttachDialogOpen] = useState(false);
+  const [attachableFiles,setAttachableFiles] = useState<any[]>([]);
+  const [attachBusy,setAttachBusy] = useState(false);
   const [scheduledMeetings,setScheduledMeetings] = useState<any[]>([]);
   const [meetingTitle,setMeetingTitle] = useState('팀 회의');
   const [meetingTime,setMeetingTime] = useState('');
@@ -449,6 +452,34 @@ function WorkspaceApp() {
     setScheduledMeetings(v=>v.filter(m=>m.id!==id));notify('회의 예약을 취소했습니다.');
   };
 
+  const openAttachDialog=async()=>{
+    if(!supabase||!workspaceId)return;
+    setAttachBusy(true);setAttachDialogOpen(true);
+    const {data,error}=await supabase.from('workspace_files').select('id,file_name,mime_type,size_bytes,storage_path,uploaded_by,created_at').eq('workspace_id',workspaceId).order('created_at',{ascending:false}).limit(100);
+    setAttachBusy(false);
+    if(error){notify('첨부할 파일 조회 실패: '+error.message);return;}
+    setAttachableFiles(data||[]);
+  };
+  const attachWorkspaceFile=async(file:any)=>{
+    if(!supabase||!currentUser||!channelIds[activeChannel]||attachBusy)return;
+    const draft=message.trim();
+    const content=[draft,'[NEXUS_FILE:'+file.id+']'].filter(Boolean).join('\\n');
+    setAttachBusy(true);
+    const {data,error}=await supabase.from('messages').insert({channel_id:channelIds[activeChannel],author_id:currentUser.id,content}).select('id,content,created_at,author_id').single();
+    setAttachBusy(false);
+    if(error){notify('파일 첨부 실패: '+error.message);return;}
+    if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id}]);
+    setMessage('');setAttachDialogOpen(false);notify('파일을 메시지에 첨부했습니다.');
+  };
+  const downloadWorkspaceFileById=async(id:string)=>{
+    if(!supabase)return;
+    const {data:file,error:fileError}=await supabase.from('workspace_files').select('file_name,storage_path').eq('id',id).maybeSingle();
+    if(fileError||!file){notify('첨부 파일을 찾을 수 없습니다.');return;}
+    const {data,error}=await supabase.storage.from('nexus-files').createSignedUrl(file.storage_path,60);
+    if(error||!data?.signedUrl){notify('첨부 파일 다운로드 실패: '+(error?.message||'오류'));return;}
+    const link=document.createElement('a');link.href=data.signedUrl;link.target='_blank';link.rel='noopener noreferrer';link.download=file.file_name;document.body.appendChild(link);link.click();link.remove();
+  };
+
   const loadWorkspaceFiles=async()=>{
     if(!supabase||!workspaceId)return;
     const {data,error}=await supabase.from('workspace_files').select('id,file_name,mime_type,size_bytes,storage_path,uploaded_by,created_at').eq('workspace_id',workspaceId).order('created_at',{ascending:false}).limit(100);
@@ -519,9 +550,9 @@ function WorkspaceApp() {
           <div className="topic-banner"><Sparkles size={16}/><span><b>NEXUS 프로젝트</b> — 하나의 공간에서 대화, AI, 협업을 연결합니다.</span></div>
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
-            {messages.map(m=><article className="message-row" key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div><p>{m.text}</p></div></article>)}
+            {messages.map(m=><article className="message-row" key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}</div></article>)}
           </div>
-          <div className="composer-wrap"><div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={()=>{setSection('files');notify('파일 페이지에서 업로드 버튼을 눌러 파일을 선택해 주세요.')}}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 서버 저장 및 실시간 동기화</div></div>
+          <div className="composer-wrap"><div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={openAttachDialog}><Paperclip size={18}/></button><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMessage()}} placeholder={`# ${activeChannel}에 메시지 보내기`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · 서버 저장 및 실시간 동기화</div></div>
         </section>
         <aside className={`ai-panel ${mobilePanel==='ai'?'mobile-ai-open':''}`}>
           <div className="ai-header"><div className="ai-symbol"><Sparkles size={17}/></div><div><strong>NEXUS AI</strong><small>통합 AI 어시스턴트</small></div><button className="icon-button mobile-close" onClick={()=>setMobilePanel('none')} aria-label="닫기"><X size={17}/></button><span className="beta-pill">BETA</span></div>
@@ -602,7 +633,7 @@ function WorkspaceApp() {
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='dm')setSection('dms');if(n.type==='friend_request')setSection('community');setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
-    {channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><p>영문, 숫자, 한글, 하이픈을 사용할 수 있습니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
+    {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><p>영문, 숫자, 한글, 하이픈을 사용할 수 있습니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
 }
