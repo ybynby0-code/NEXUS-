@@ -35,10 +35,12 @@ function WorkspaceApp() {
   const [dmMessages,setDmMessages] = useState<any[]>([]);
   const [dmDraft,setDmDraft] = useState('');
   const [notifications,setNotifications] = useState<any[]>([]);
-  const [profile,setProfile] = useState({display_name:'',bio:'',avatar_url:'',theme_color:'#7867e8'});
+  const [profile,setProfile] = useState({display_name:'',bio:'',avatar_url:'',banner_url:'',theme_background_url:'',theme_color:'#7867e8',profile_decoration:'none',theme_mode:'dark'});
   const [profileBusy,setProfileBusy] = useState(false);
   const [logoutBusy,setLogoutBusy] = useState(false);
   const avatarInput=useRef<HTMLInputElement>(null);
+  const bannerInput=useRef<HTMLInputElement>(null);
+  const themeImageInput=useRef<HTMLInputElement>(null);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiBusy,setAiBusy] = useState(false);
   const [aiAnswer,setAiAnswer] = useState('NEXUS AI 서버 연결이 준비되어 있습니다. 제공자 키가 등록되면 실제 답변을 생성합니다.');
@@ -92,8 +94,8 @@ function WorkspaceApp() {
       const displayName=String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
       if(alive)setCurrentUser({id:user.id,name:displayName,email:user.email||''});
       const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
-      const {data:profileRow}=await supabase.from('profiles').select('display_name,bio,avatar_url,theme_color').eq('id',user.id).maybeSingle();
-      if(profileRow&&alive)setProfile({display_name:profileRow.display_name||displayName,bio:profileRow.bio||'',avatar_url:profileRow.avatar_url||'',theme_color:profileRow.theme_color||'#7867e8'});
+      const {data:profileRow}=await supabase.from('profiles').select('display_name,bio,avatar_url,theme_color,banner_url,theme_background_url,profile_decoration,theme_mode').eq('id',user.id).maybeSingle();
+      if(profileRow&&alive)setProfile({display_name:profileRow.display_name||displayName,bio:profileRow.bio||'',avatar_url:profileRow.avatar_url||'',banner_url:profileRow.banner_url||'',theme_background_url:profileRow.theme_background_url||'',theme_color:profileRow.theme_color||'#7867e8',profile_decoration:profileRow.profile_decoration||'none',theme_mode:profileRow.theme_mode||'dark'});
       if(profileError)throw profileError;
       const {data:membership,error:memberError}=await supabase.from('workspace_members').select('workspace_id').eq('user_id',user.id).limit(1).maybeSingle();
       if(memberError)throw memberError;
@@ -203,24 +205,36 @@ function WorkspaceApp() {
   };
   const saveProfile=async()=>{
     if(!supabase||!currentUser)return;setProfileBusy(true);
-    const {error}=await supabase.from('profiles').upsert({id:currentUser.id,display_name:profile.display_name.trim()||currentUser.name,bio:profile.bio.slice(0,160),avatar_url:profile.avatar_url,theme_color:profile.theme_color},{onConflict:'id'});
+    const {error}=await supabase.from('profiles').upsert({id:currentUser.id,display_name:profile.display_name.trim()||currentUser.name,bio:profile.bio.slice(0,160),avatar_url:profile.avatar_url,banner_url:profile.banner_url,theme_background_url:profile.theme_background_url,theme_color:profile.theme_color,profile_decoration:profile.profile_decoration,theme_mode:profile.theme_mode},{onConflict:'id'});
     setProfileBusy(false);if(error)notify('프로필 저장 실패: '+error.message);else{notify('프로필을 저장했습니다.');setSettingsOpen(false);}
   };
-  const uploadAvatar=async(file?:File)=>{
+  const uploadProfileImage=async(kind:'avatar'|'banner'|'theme',file?:File)=>{
     if(!file||!supabase||!currentUser)return;
-    if(!file.type.startsWith('image/')||file.size>5*1024*1024){notify('이미지 파일(5MB 이하)을 선택해 주세요.');return;}
-    const path=currentUser.id+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-    const {error}=await supabase.storage.from('nexus-avatars').upload(path,file,{upsert:true,contentType:file.type});
-    if(error){notify('사진 업로드 실패: '+error.message);return;}
+    if(!file.type.startsWith('image/')||file.size>8*1024*1024){notify('이미지 파일(8MB 이하)을 선택해 주세요.');return;}
+    const path=currentUser.id+'/'+kind+'-'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const {error}=await supabase.storage.from('nexus-avatars').upload(path,file,{upsert:false,contentType:file.type});
+    if(error){notify('이미지 업로드 실패: '+error.message);return;}
     const {data}=supabase.storage.from('nexus-avatars').getPublicUrl(path);
-    setProfile(v=>({...v,avatar_url:data.publicUrl}));notify('사진을 선택했습니다. 프로필 저장을 눌러 반영하세요.');
+    const field=kind==='avatar'?'avatar_url':kind==='banner'?'banner_url':'theme_background_url';
+    setProfile(v=>({...v,[field]:data.publicUrl}));notify('이미지를 적용했습니다. 프로필 저장을 눌러 반영하세요.');
+  };
+  const sendPing=async()=>{
+    if(!supabase||!currentUser||!activeDm?.person?.id)return;
+    const recipient=activeDm.person.id;
+    const {error}=await supabase.from('notifications').insert({recipient_id:recipient,actor_id:currentUser.id,type:'ping',title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',target_id:activeDm.id});
+    if(error){notify('핑 전송 실패: '+error.message);return;}
+    try{await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',url:'./?section=dms'}});}catch(e){console.warn('[NEXUS push]',e);}
+    notify('핑을 보냈습니다.');
   };
   useEffect(()=>{
     if(!supabase||!currentUser)return;
     loadDmConversations();loadNotifications();
     const sub=supabase.channel('nexus-notifications-'+currentUser.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'recipient_id=eq.'+currentUser.id},(payload:any)=>{
       const n=payload.new;setNotifications(v=>[n,...v]);
-      if('Notification' in window&&Notification.permission==='granted')new Notification(n.title,{body:n.body,tag:n.id});else notify(n.title+': '+n.body);
+      if(n.type==='ping'&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
+      if('Notification' in window&&Notification.permission==='granted'){
+        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:n.id,icon:'./icons/nexus.svg',vibrate:n.type==='ping'?[260,100,260,100,420]:[180],data:{url:'./?section=dms'}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
+      }else notify(n.title+': '+n.body);
     }).subscribe();
     return()=>{supabase?.removeChannel(sub);};
   },[currentUser?.id]);
@@ -566,7 +580,7 @@ function WorkspaceApp() {
             {!dmConversations.length&&<div className="empty-state">친구를 추가한 뒤 친구 목록에서 DM을 시작하세요.</div>}
           </aside>
           <div className="section-card dm-chat">
-            {activeDm?<><div className="dm-chat-head"><div className="avatar violet">{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div></div>
+            {activeDm?<><div className="dm-chat-head"><div className="avatar violet">{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button></div>
               <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time>{m.sender_id===currentUser?.id&&<small className="dm-read-state">{m.read_at?'읽음':'전송됨'}</small>}</div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
               <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
             </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
@@ -621,12 +635,19 @@ function WorkspaceApp() {
     </main>
 
     {searchOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSearchOpen(false)}}><div className="search-modal"><div className="search-input-row"><Search size={19}/><input autoFocus value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="메시지와 멤버 검색..."/><button onClick={()=>setSearchOpen(false)}><X size={18}/></button></div><div className="search-results"><div className="search-caption">전체 메시지 검색 · {searchBusy?'검색 중...':searchResults.length+'개'}</div>{searchResults.map(m=><button className="search-result" key={m.kind+'-'+m.id} onClick={()=>{if(m.kind==='channel'){const target=Object.entries(channelIds).find(([,id])=>id===m.channel_id);if(target){setActiveChannel(target[0]);setSection('messages');}}else{const target=dmConversations.find(c=>c.id===m.conversation_id);if(target){setActiveDm(target);setSection('dms');}}setSearchOpen(false);setSearchQuery('');}}><div className="avatar violet">{(m.author||'U').slice(0,1)}</div><div><strong>{m.author} · {m.location}</strong><p>{m.content}</p></div></button>)}{!searchBusy&&searchResults.length===0&&<div className="empty-state">{searchQuery.trim()?'검색 결과가 없습니다.':'검색어를 입력하세요.'}</div>}</div><div className="search-foot">ESC 닫기 · Ctrl K 검색 열기</div></div></div>}
-    {settingsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSettingsOpen(false)}}><div className="settings-modal"><div className="modal-title"><div><div className="eyebrow">PREFERENCES</div><h2>설정</h2></div><button className="icon-button" onClick={()=>setSettingsOpen(false)}><X/></button></div><div className="profile-editor">
-          <div className="profile-avatar-edit"><div className="avatar profile-large">{profile.avatar_url?<img src={profile.avatar_url}/>:((profile.display_name||currentUser?.name||'N').slice(0,1))}</div><button className="secondary-action" onClick={()=>avatarInput.current?.click()}><Upload size={14}/> 사진 변경</button><input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={e=>uploadAvatar(e.target.files?.[0])}/></div>
+    {settingsOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSettingsOpen(false)}}><div className="settings-modal"><div className="modal-title"><div><div className="eyebrow">PROFILE & APPEARANCE</div><h2>프로필 및 테마 꾸미기</h2></div><button className="icon-button" onClick={()=>setSettingsOpen(false)}><X/></button></div><div className="profile-editor">
+          <div className="profile-custom-preview" style={{backgroundImage:profile.banner_url?`linear-gradient(90deg,#10182788,#10182722),url("${profile.banner_url}")`:undefined,borderColor:profile.theme_color}}><div className={'avatar profile-large decoration-'+profile.profile_decoration}>{profile.avatar_url?<img src={profile.avatar_url}/>:((profile.display_name||currentUser?.name||'N').slice(0,1))}</div><div><strong>{profile.display_name||currentUser?.name||'NEXUS 사용자'}</strong><small>{profile.bio||'상태 메시지를 입력하세요.'}</small></div></div>
+          <div className="profile-upload-grid"><button className="secondary-action" onClick={()=>avatarInput.current?.click()}><Upload size={14}/> 프로필 사진</button><button className="secondary-action" onClick={()=>bannerInput.current?.click()}><Upload size={14}/> 프로필 배너</button></div>
+          <input ref={avatarInput} type="file" accept="image/*" hidden onChange={e=>uploadProfileImage('avatar',e.target.files?.[0])}/><input ref={bannerInput} type="file" accept="image/*" hidden onChange={e=>uploadProfileImage('banner',e.target.files?.[0])}/>
           <label>표시 이름<input maxLength={40} value={profile.display_name} onChange={e=>setProfile(v=>({...v,display_name:e.target.value}))}/></label>
-          <label>상태 메시지<input maxLength={160} value={profile.bio} onChange={e=>setProfile(v=>({...v,bio:e.target.value}))} placeholder="현재 상태를 알려주세요."/></label>
-          <label>프로필 테마 색상<input type="color" value={profile.theme_color} onChange={e=>setProfile(v=>({...v,theme_color:e.target.value}))}/></label>
-          <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 저장'}</button>
+          <label>소개 및 상태 메시지<textarea maxLength={160} rows={3} value={profile.bio} onChange={e=>setProfile(v=>({...v,bio:e.target.value}))} placeholder="자신을 소개해 보세요."/></label>
+          <label>프로필 장식<select value={profile.profile_decoration} onChange={e=>setProfile(v=>({...v,profile_decoration:e.target.value}))}><option value="none">기본</option><option value="glow">네온 글로우</option><option value="ring">컬러 링</option><option value="gold">골드</option></select></label>
+          <label>테마 모드<select value={profile.theme_mode} onChange={e=>setProfile(v=>({...v,theme_mode:e.target.value}))}><option value="dark">다크</option><option value="light">라이트</option><option value="midnight">미드나이트</option></select></label>
+          <label>포인트 색상<input type="color" value={profile.theme_color} onChange={e=>setProfile(v=>({...v,theme_color:e.target.value}))}/></label>
+          <div className="theme-image-row"><div><strong>내 사진으로 배경 만들기</strong><small>직접 촬영한 사진이나 갤러리 이미지를 테마 배경으로 사용합니다.</small></div><button className="secondary-action" onClick={()=>themeImageInput.current?.click()}><Upload size={14}/> 사진 선택</button></div>
+          <input ref={themeImageInput} type="file" accept="image/*" capture="environment" hidden onChange={e=>uploadProfileImage('theme',e.target.files?.[0])}/>
+          {profile.theme_background_url&&<button className="secondary-action full-action" onClick={()=>setProfile(v=>({...v,theme_background_url:''}))}>배경 사진 제거</button>}
+          <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 및 테마 저장'}</button>
           <button className="secondary-action full-action" onClick={async()=>{if(!('Notification' in window)){notify('이 브라우저는 알림을 지원하지 않습니다.');return;}const p=await Notification.requestPermission();notify(p==='granted'?'브라우저 알림이 허용되었습니다.':'알림 권한이 허용되지 않았습니다.')}}><Bell size={14}/> 브라우저 알림 허용</button>
           <div className="settings-note">앱이 열려 있을 때 실시간 알림을 받을 수 있습니다. 앱을 닫은 뒤 푸시 알림을 보내려면 푸시 서버 키 설정이 추가로 필요합니다.</div>
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
