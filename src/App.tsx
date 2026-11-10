@@ -162,7 +162,7 @@ function WorkspaceApp() {
     const {data,error}=await supabase.from('dm_conversations').select('id,member_one,member_two,created_at').or('member_one.eq.'+currentUser.id+',member_two.eq.'+currentUser.id).order('created_at',{ascending:false});
     if(error){notify('DM 목록 조회 실패: '+error.message);return;}
     const rows=data||[];const ids=[...new Set(rows.map((c:any)=>c.member_one===currentUser.id?c.member_two:c.member_one))];
-    const {data:people}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio').in('id',ids):{data:[]};
+    const {data:people}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio,banner_url,profile_decoration,theme_color').in('id',ids):{data:[]};
     const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
     setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
   };
@@ -594,11 +594,11 @@ function WorkspaceApp() {
         <div className="feature-heading"><div><div className="eyebrow">PRIVATE CONVERSATIONS</div><h1>다이렉트 메시지</h1><p>친구로 등록된 실제 사용자와 대화합니다.</p></div></div>
         <div className="dm-layout">
           <aside className="section-card dm-list"><div className="card-title"><MessageCircle size={18}/>대화 목록</div>
-            {dmConversations.map(c=><button className={'dm-person '+(activeDm?.id===c.id?'selected':'')} key={c.id} onClick={()=>setActiveDm(c)}><div className="avatar violet">{c.person?.avatar_url?<img src={c.person.avatar_url}/>:((c.person?.display_name||'U').slice(0,1))}</div><div><strong>{c.person?.display_name||'사용자'}</strong><small>{c.person?.bio||'친구'}</small></div></button>)}
+            {dmConversations.map(c=><button className={'dm-person '+(activeDm?.id===c.id?'selected':'')} key={c.id} onClick={()=>setActiveDm(c)}><div className={'avatar violet decoration-'+(c.person?.profile_decoration||'none')} style={c.person?.theme_color?{borderColor:c.person.theme_color}:undefined}>{c.person?.avatar_url?<img src={c.person.avatar_url}/>:((c.person?.display_name||'U').slice(0,1))}</div><div><strong>{c.person?.display_name||'사용자'}</strong><small>{c.person?.bio||'친구'}</small></div></button>)}
             {!dmConversations.length&&<div className="empty-state">친구를 추가한 뒤 친구 목록에서 DM을 시작하세요.</div>}
           </aside>
           <div className="section-card dm-chat">
-            {activeDm?<><div className="dm-chat-head"><div className="avatar violet">{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button></div>
+            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className={'avatar violet decoration-'+(activeDm.person?.profile_decoration||'none')} style={activeDm.person?.theme_color?{borderColor:activeDm.person.theme_color}:undefined}>{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button></div>
               <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time>{m.sender_id===currentUser?.id&&<small className="dm-read-state">{m.read_at?'읽음':'전송됨'}</small>}</div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
               <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
             </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
