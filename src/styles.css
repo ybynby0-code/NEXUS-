@@ -858,3 +858,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
   .main-area{padding-bottom:62px}
   .sidebar{padding-bottom:80px}
 }
+
+.join-link-card{border-color:#4c427e!important;background:linear-gradient(145deg,#171a30,#111a2a)!important}
+.join-link-create{width:fit-content;max-width:100%}
+.join-link-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:8px}
+.join-link-result input{width:100%;min-width:0;background:#0b1220;border:1px solid #34415a;border-radius:9px;color:#dfe6f3;padding:11px;font-size:12px}
+.join-link-result button{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.join-link-result small{grid-column:1/-1;color:#9ba8bd;font-size:11px}
+@media(max-width:600px){.join-link-result{grid-template-columns:minmax(0,1fr)}.join-link-result button{width:100%;justify-content:center}.join-link-result small{grid-column:1}}
