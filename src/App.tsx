@@ -265,14 +265,30 @@ function WorkspaceApp() {
   };
   const sendFriendRequest=async(id:string)=>{
     if(!supabase||!currentUser)return;
+    const {data:incoming,error:incomingError}=await supabase.from('friend_requests').select('id').eq('sender_id',id).eq('recipient_id',currentUser.id).eq('status','pending').maybeSingle();
+    if(incomingError){notify('기존 친구 요청 확인 실패: '+incomingError.message);return;}
+    if(incoming){await respondFriendRequest(incoming.id,'accepted');setFriendResults(v=>v.filter(p=>p.id!==id));return;}
+    const {data:existing,error:existingError}=await supabase.from('friend_requests').select('id,status').eq('sender_id',currentUser.id).eq('recipient_id',id).maybeSingle();
+    if(existingError){notify('친구 요청 확인 실패: '+existingError.message);return;}
+    if(existing?.status==='accepted'){notify('이미 친구로 등록된 사용자입니다.');return;}
+    if(existing?.status==='pending'){notify('이미 친구 요청을 보냈습니다.');return;}
+    if(existing?.status==='rejected'){
+      const {error:deleteError}=await supabase.from('friend_requests').delete().eq('id',existing.id);
+      if(deleteError){notify('이전 요청 정리 실패: '+deleteError.message);return;}
+    }
     const {error}=await supabase.from('friend_requests').insert({sender_id:currentUser.id,recipient_id:id});
-    if(error){notify(error.code==='23505'?'이미 요청을 보냈거나 받은 사용자입니다.':'친구 요청 실패: '+error.message);return;}
+    if(error){notify('친구 요청 실패: '+error.message);return;}
     notify('친구 요청을 보냈습니다.');setFriendResults(v=>v.filter(p=>p.id!==id));loadFriendData();
   };
   const respondFriendRequest=async(id:string,status:'accepted'|'rejected')=>{
-    if(!supabase)return;
+    if(!supabase||!currentUser)return;
+    const request=friendRequests.find((r:any)=>r.id===id);
     const {error}=await supabase.from('friend_requests').update({status,updated_at:new Date().toISOString()}).eq('id',id);
     if(error){notify('요청 처리 실패: '+error.message);return;}
+    if(status==='accepted'&&request?.sender_id){
+      const {error:reverseError}=await supabase.from('friend_requests').delete().eq('sender_id',currentUser.id).eq('recipient_id',request.sender_id).eq('status','pending');
+      if(reverseError)console.warn('[NEXUS reverse friend request]',reverseError);
+    }
     notify(status==='accepted'?'친구 요청을 수락했습니다.':'친구 요청을 거절했습니다.');loadFriendData();
   };
   useEffect(()=>{if(section==='community'&&currentUser)loadFriendData()},[section,currentUser?.id]);
