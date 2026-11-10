@@ -225,7 +225,7 @@ function WorkspaceApp() {
   };
   const enablePushNotifications=async()=>{
     if(!supabase){notify('서버 연결이 필요합니다.');return;}
-    if(!('serviceWorker' in navigator)||!('PushManager' in window)){notify('이 브라우저는 웹 푸시를 지원하지 않습니다.');return;}
+    if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){notify('이 브라우저는 웹 푸시를 지원하지 않습니다.');return;}
     const permission=await Notification.requestPermission();if(permission!=='granted'){notify('시스템 알림 권한을 허용해 주세요.');return;}
     try{
       const {data:keyData,error:keyError}=await supabase.functions.invoke('nexus-push',{body:{action:'public_key'}});
@@ -233,7 +233,8 @@ function WorkspaceApp() {
       const publicKey=keyData.public_key as string;
       const registration=await navigator.serviceWorker.ready;
       const decode=(value:string)=>{const pad='='.repeat((4-value.length%4)%4);const raw=atob((value+pad).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,c=>c.charCodeAt(0));};
-      const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(publicKey)});
+      const existing=await registration.pushManager.getSubscription();
+      const subscription=existing||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(publicKey)});
       const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('로그인이 필요합니다.');
       const payload=subscription.toJSON();
       const {error}=await supabase.from('push_subscriptions').upsert({user_id:user.id,endpoint:subscription.endpoint,subscription:payload},{onConflict:'endpoint'});
