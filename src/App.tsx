@@ -463,7 +463,7 @@ function WorkspaceApp() {
   const attachWorkspaceFile=async(file:any)=>{
     if(!supabase||!currentUser||!channelIds[activeChannel]||attachBusy)return;
     const draft=message.trim();
-    const content=[draft,'[NEXUS_FILE:'+file.id+']'].filter(Boolean).join('\\n');
+    const content=[draft,'[NEXUS_FILE:'+file.id+']'].filter(Boolean).join('\n');
     setAttachBusy(true);
     const {data,error}=await supabase.from('messages').insert({channel_id:channelIds[activeChannel],author_id:currentUser.id,content}).select('id,content,created_at,author_id').single();
     setAttachBusy(false);
