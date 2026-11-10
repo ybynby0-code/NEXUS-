@@ -253,8 +253,8 @@ export default function CallRoom({
       if (presenceBeforeJoin.length >= MAX_PARTICIPANTS) {
         throw new Error('회의방은 최대 ' + MAX_PARTICIPANTS + '명까지 참여할 수 있습니다.');
       }
-      const { error: trackError } = await channel.track({ user_id: userId, display_name: displayName });
-      if (trackError) throw trackError;
+      const trackStatus = await channel.track({ user_id: userId, display_name: displayName });
+      if (trackStatus !== 'ok') throw new Error('회의 참가자 상태를 등록하지 못했습니다. 다시 시도해 주세요.');
 
       activeRef.current = true;
       setActive(true);
