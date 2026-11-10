@@ -387,3 +387,10 @@ for select to authenticated using (
       and w.owner_id = (select auth.uid())
   )
 );
+
+-- Profile fields used by the current mobile client.
+alter table public.profiles
+  add column if not exists status_text text not null default '',
+  add column if not exists theme_color text not null default '#7867e8',
+  add column if not exists last_seen_at timestamptz;
+
