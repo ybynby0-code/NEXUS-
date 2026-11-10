@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import CallRoom from './CallRoom';
 import AdminPanel from './AdminPanel';
-import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
+import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2 } from 'lucide-react';
 
 type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string };
@@ -59,6 +59,10 @@ function WorkspaceApp() {
   const [inviteDraft,setInviteDraft] = useState('');
   const [workspaceInvites,setWorkspaceInvites] = useState<any[]>([]);
   const [inviteBusy,setInviteBusy] = useState(false);
+  const [joinLink,setJoinLink] = useState('');
+  const [joinLinkExpires,setJoinLinkExpires] = useState('');
+  const [joinLinkBusy,setJoinLinkBusy] = useState(false);
+  const joinTokenHandled=useRef(false);
   const [files,setFiles] = useState<any[]>([]);
   const [filesBusy,setFilesBusy] = useState(false);
   const [attachDialogOpen,setAttachDialogOpen] = useState(false);
@@ -164,6 +168,52 @@ function WorkspaceApp() {
     });
     return()=>{setOnlineCount(0);void supabase.removeChannel(presence);};
   },[currentUser?.id,workspaceId]);
+
+  useEffect(()=>{
+    if(!supabase||!dbReady||!workspaceId)return;
+    let alive=true;
+    const refreshChannels=async()=>{
+      const {data,error}=await supabase.from('channels').select('id,name').eq('workspace_id',workspaceId).order('created_at');
+      if(error){console.warn('[NEXUS channels realtime]',error);return;}
+      if(!alive)return;
+      const map:Record<string,string>={};(data||[]).forEach((c:any)=>map[c.name]=c.id);
+      setChannelIds(map);setChannels((data||[]).map((c:any)=>c.name));
+      setActiveChannel(current=>(data||[]).some((c:any)=>c.name===current)?current:(data?.[0]?.name||'general'));
+    };
+    const sub=supabase.channel('nexus-workspace-channels-'+workspaceId)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'channels',filter:'workspace_id=eq.'+workspaceId},refreshChannels)
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'channels',filter:'workspace_id=eq.'+workspaceId},refreshChannels)
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'channels'},refreshChannels)
+      .subscribe();
+    return()=>{alive=false;void supabase.removeChannel(sub)};
+  },[supabase,dbReady,workspaceId]);
+
+  useEffect(()=>{
+    if(!supabase||!dbReady||!currentUser||joinTokenHandled.current)return;
+    const token=new URLSearchParams(window.location.search).get('join');
+    if(!token)return;
+    joinTokenHandled.current=true;
+    let alive=true;
+    (async()=>{
+      try{
+        const {data,error}=await supabase.functions.invoke('workspace-join-link',{body:{action:'accept',token}});
+        if(error||!data?.ok)throw new Error(data?.error||error?.message||'초대 링크 수락 실패');
+        const [{data:rows,error:channelError},{data:allWorkspaces,error:workspaceError}]=await Promise.all([
+          supabase.from('channels').select('id,name').eq('workspace_id',data.workspace_id).order('created_at'),
+          supabase.from('workspaces').select('id,name,owner_id').order('created_at')
+        ]);
+        if(channelError)throw channelError;if(workspaceError)throw workspaceError;
+        if(!alive)return;
+        const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
+        setWorkspaces(allWorkspaces||[]);setWorkspaceId(data.workspace_id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));
+        if(rows?.[0])setActiveChannel(rows[0].name);
+        setSection('messages');setMobilePanel('none');
+        window.history.replaceState({},'',window.location.pathname);
+        notify(data.workspace_name+' 서버에 참여했습니다. 채널 목록을 불러왔습니다.');
+      }catch(e:any){joinTokenHandled.current=false;notify('서버 초대 링크 오류: '+(e?.message||'다시 시도해 주세요.'));}
+    })();
+    return()=>{alive=false};
+  },[supabase,dbReady,currentUser?.id]);
 
   const loadDmConversations=async()=>{
     if(!supabase||!currentUser)return;
@@ -473,6 +523,24 @@ function WorkspaceApp() {
     notify(data.emailSent?'초대 이메일을 발송했습니다.':'초대는 저장됐지만 이메일은 발송되지 않았습니다. 기존 계정은 초대 목록에서 수락할 수 있습니다.');
     await loadWorkspacePeople();
   };
+  const createWorkspaceJoinLink=async()=>{
+    if(!supabase||!workspaceId||joinLinkBusy)return;
+    setJoinLinkBusy(true);
+    try{
+      const {data,error}=await supabase.functions.invoke('workspace-join-link',{body:{action:'create',workspace_id:workspaceId}});
+      if(error||!data?.ok)throw new Error(data?.error||error?.message||'초대 링크 생성 실패');
+      const link=window.location.origin+window.location.pathname+'?join='+data.token;
+      setJoinLink(link);setJoinLinkExpires(data.expires_at||'');
+      try{await navigator.clipboard.writeText(link);notify('서버 초대 링크를 만들고 복사했습니다.');}
+      catch{notify('초대 링크를 만들었습니다. 아래 링크를 길게 눌러 복사해 주세요.');}
+    }catch(e:any){notify('초대 링크 생성 실패: '+(e?.message||'오류'));}
+    finally{setJoinLinkBusy(false);}
+  };
+  const copyWorkspaceJoinLink=async()=>{
+    if(!joinLink)return;
+    try{await navigator.clipboard.writeText(joinLink);notify('초대 링크를 복사했습니다.');}
+    catch{window.prompt('서버 초대 링크를 복사하세요.',joinLink);}
+  };
   const acceptWorkspaceInvite=async(inviteId:string)=>{
     if(!supabase)return;
     const {data,error}=await supabase.rpc('accept_workspace_invite',{p_invite_id:inviteId});
@@ -653,6 +721,12 @@ function WorkspaceApp() {
         <div className="section-card">
           <div className="card-title"><Users size={18}/>워크스페이스 멤버 <span>{members.length}명</span></div>
           {members.map(m=><div className="member-row" key={m.user_id}><div className="avatar violet">{(m.person?.display_name||'U').slice(0,1)}</div><div><strong>{m.person?.display_name||'사용자'}</strong><small>{m.role==='owner'?'소유자':m.role==='admin'?'관리자':'멤버'}</small></div></div>)}
+        </div>
+        <div className="section-card join-link-card">
+          <div className="card-title"><Link2 size={18}/>서버 초대 링크</div>
+          <p className="settings-note">링크를 받은 사람은 로그인한 뒤 서버에 참여하고 공개 채널을 볼 수 있습니다. 링크는 7일 후 만료됩니다.</p>
+          <button className="primary-action join-link-create" onClick={createWorkspaceJoinLink} disabled={joinLinkBusy||!workspaceId}>{joinLinkBusy?'생성 중...':'초대 링크 만들기 및 복사'}</button>
+          {joinLink&&<div className="join-link-result"><input aria-label="서버 초대 링크" readOnly value={joinLink} onFocus={e=>e.currentTarget.select()}/><button className="secondary-action" onClick={copyWorkspaceJoinLink}><Copy size={15}/>복사</button><small>만료: {joinLinkExpires?new Date(joinLinkExpires).toLocaleString('ko-KR'):'7일 후'}</small></div>}
         </div>
         <div className="section-card">
           <div className="card-title"><UserPlus size={18}/>이메일로 워크스페이스 초대</div>
