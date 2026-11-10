@@ -567,3 +567,13 @@ body{background:var(--nx-bg);color:var(--nx-ink)}
 .call-controls button.off{background:#fce8de;border-color:#f3c4ad;color:#a94f2d}
 .call-controls button.hangup{background:#292b26;border-color:#292b26;color:#fffaf1}
 @media(max-width:620px){.call-entry{grid-template-columns:1fr}.call-videos{grid-template-columns:1fr}.call-video-card{aspect-ratio:16/10}.call-controls button{flex:1;min-width:100px}.call-code{align-items:flex-start;flex-direction:column}}
+
+.schedule-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;padding:15px 0;border-bottom:1px solid #eeeae1}
+.schedule-form input{min-width:0;height:39px;background:#fbf9f3;border:1px solid #ddd8cc;border-radius:9px;padding:0 10px;color:#292b25;font-size:11px}
+.scheduled-row{display:flex;align-items:center;gap:9px;padding:12px 2px;border-bottom:1px solid #eeeae1}
+.scheduled-row:last-child{border-bottom:0}
+.scheduled-row>div{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px}
+.scheduled-row strong{font-size:11px;color:#292b25}
+.scheduled-row small{font-size:9px;color:#88867b}
+.scheduled-row .secondary-action{display:inline-flex;align-items:center;gap:5px;padding:8px 9px;font-size:9px}
+@media(max-width:650px){.schedule-form{grid-template-columns:1fr}.scheduled-row{flex-wrap:wrap}.scheduled-row>div{flex:1 0 100%}}
