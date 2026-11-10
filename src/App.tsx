@@ -522,15 +522,15 @@ function WorkspaceApp() {
   return <div className="app-shell">
     <aside className={`sidebar ${mobilePanel==='nav'?'mobile-open':''}`}>
 
-      <button className="workspace-switch" onClick={()=>setWorkspaceMenuOpen(v=>!v)} aria-expanded={workspaceMenuOpen}><div className="workspace-icon">N<span>•</span></div><div><strong>{workspaces.find(w=>w.id===workspaceId)?.name||'NEXUS'}</strong><small>YOUR SPACE, CONNECTED</small></div><ChevronDown size={16}/></button>{workspaceMenuOpen&&<div className="workspace-menu">{workspaces.map(w=><button key={w.id} className={w.id===workspaceId?'active':''} onClick={()=>switchWorkspace(w.id)}>{w.name}{w.id===workspaceId&&<Check size={14}/>}</button>)}<div className="workspace-create"><input value={workspaceDraft} onChange={e=>setWorkspaceDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createWorkspace()} placeholder="새 워크스페이스 이름" maxLength={80}/><button onClick={createWorkspace} disabled={workspaceBusy}><Plus size={14}/></button></div></div>}
+      <button className="workspace-switch" onClick={()=>setWorkspaceMenuOpen(v=>!v)} aria-expanded={workspaceMenuOpen}><div className="workspace-icon">N<span>•</span></div><div><strong>{workspaces.find(w=>w.id===workspaceId)?.name||'NEXUS'}</strong><small>팀 작업 공간</small></div><ChevronDown size={16}/></button>{workspaceMenuOpen&&<div className="workspace-menu">{workspaces.map(w=><button key={w.id} className={w.id===workspaceId?'active':''} onClick={()=>switchWorkspace(w.id)}>{w.name}{w.id===workspaceId&&<Check size={14}/>}</button>)}<div className="workspace-create"><input value={workspaceDraft} onChange={e=>setWorkspaceDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createWorkspace()} placeholder="새 워크스페이스 이름" maxLength={80}/><button onClick={createWorkspace} disabled={workspaceBusy}><Plus size={14}/></button></div></div>}
       <button className="sidebar-search" onClick={()=>setSearchOpen(true)}><Search size={15}/><span>빠른 검색</span><kbd>Ctrl K</kbd></button>
-      <div className="side-label">YOUR WORKSPACE <button aria-label="워크스페이스 추가" onClick={()=>setWorkspaceMenuOpen(true)}><Plus size={15}/></button></div>
-      <button className={`side-link ${section==='messages'?'selected':''}`} onClick={()=>setSection('messages')}><MessageCircle size={17}/>메시지 <span className="count">{messages.length}</span></button>
+      <div className="side-label">내 워크스페이스 <button aria-label="워크스페이스 추가" onClick={()=>setWorkspaceMenuOpen(true)}><Plus size={15}/></button></div>
+      <button className={`side-link ${section==='messages'?'selected':''}`} onClick={()=>setSection('messages')}><MessageCircle size={17}/>메시지 </button>
       <button className={`side-link ${section==='dms'?'selected':''}`} onClick={()=>setSection('dms')}><MessageCircle size={17}/>DM</button>
       <button className={`side-link ${section==='community'?'selected':''}`} onClick={()=>setSection('community')}><Compass size={17}/>커뮤니티</button>
       <button className={`side-link ${section==='meetings'?'selected':''}`} onClick={()=>setSection('meetings')}><Video size={17}/>회의 및 통화</button>
       <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>setSection('files')}><FileText size={17}/>파일 및 문서</button>
-      <div className="side-label channels-label">CHANNELS <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
+      <div className="side-label channels-label">채널 <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
       <div className="side-bottom"><div className="online-dot"/><span>실시간 접속</span><span className="online-text">{onlineCount}명</span></div>
     </aside>
@@ -541,13 +541,12 @@ function WorkspaceApp() {
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
         <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':'파일 및 문서'}</strong></div>
-        <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button notification-trigger" aria-label="활동" onClick={()=>setNotificationsOpen(v=>!v)}><Activity size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
+        <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
 
       {section==='messages'?<div className="content-grid">
         <section className="chat-panel">
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
-          <div className="topic-banner"><Sparkles size={16}/><span><b>NEXUS 프로젝트</b> — 하나의 공간에서 대화, AI, 협업을 연결합니다.</span></div>
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
             {messages.map(m=><article className="message-row" key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong>{m.name}</strong><time>{m.time}</time>{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}</div></article>)}
