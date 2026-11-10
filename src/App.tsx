@@ -12,6 +12,10 @@ function WorkspaceApp() {
   const [section,setSection] = useState<Section>('messages');
   const [activeChannel,setActiveChannel] = useState('general');
   const [channels,setChannels] = useState(initialChannels);
+  const [workspaces,setWorkspaces] = useState<any[]>([]);
+  const [workspaceMenuOpen,setWorkspaceMenuOpen] = useState(false);
+  const [workspaceDraft,setWorkspaceDraft] = useState('');
+  const [workspaceBusy,setWorkspaceBusy] = useState(false);
   const [message,setMessage] = useState('');
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
   const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string}|null>(null);
@@ -38,6 +42,8 @@ function WorkspaceApp() {
   const [mobilePanel,setMobilePanel] = useState<'none'|'nav'|'ai'>('none');
   const [searchOpen,setSearchOpen] = useState(false);
   const [searchQuery,setSearchQuery] = useState('');
+  const [searchResults,setSearchResults] = useState<any[]>([]);
+  const [searchBusy,setSearchBusy] = useState(false);
   const [settingsOpen,setSettingsOpen] = useState(false);
   const [notificationsOpen,setNotificationsOpen] = useState(false);
   const [channelDialog,setChannelDialog] = useState(false);
@@ -93,7 +99,10 @@ function WorkspaceApp() {
         const {error:channelsError}=await supabase.from('channels').insert(defaults);
         if(channelsError)throw channelsError;
       }
+      const {data:workspaceRows,error:workspaceListError}=await supabase.from('workspaces').select('id,name,owner_id').order('created_at');
+      if(workspaceListError)throw workspaceListError;
       if(!alive)return;
+      setWorkspaces(workspaceRows||[]);
       setWorkspaceId(wid!);
       const {data:rows,error:rowsError}=await supabase.from('channels').select('id,name').eq('workspace_id',wid!).order('created_at');
       if(rowsError)throw rowsError;
@@ -109,6 +118,7 @@ function WorkspaceApp() {
     if(!supabase||!dbReady||!channelIds[activeChannel])return;
     let alive=true;const channelId=channelIds[activeChannel];
     const load=async()=>{
+      setMessages([]);
       const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id').eq('channel_id',channelId).order('created_at').limit(100);
       if(error)throw error;
       const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name').in('id',ids):{data:[]};const names:Record<string,string>={};(profiles||[]).forEach((p:any)=>names[p.id]=p.display_name);if(alive)setMessages((data||[]).map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':names[m.author_id]||'사용자',initials:(m.author_id===currentUser?.id?'나':names[m.author_id]||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
@@ -151,7 +161,8 @@ function WorkspaceApp() {
   };
   const markNotificationRead=async(id:string)=>{
     if(!supabase)return;const at=new Date().toISOString();
-    await supabase.from('notifications').update({read_at:at}).eq('id',id);
+    const {error}=await supabase.from('notifications').update({read_at:at}).eq('id',id);
+    if(error){notify('알림 읽음 처리 실패: '+error.message);return;}
     setNotifications(v=>v.map(n=>n.id===id?{...n,read_at:at}:n));
   };
   const signOut=async()=>{
@@ -246,6 +257,49 @@ function WorkspaceApp() {
   };
   useEffect(()=>{if(section==='community'&&currentUser)loadFriendData()},[section,currentUser?.id]);
   const filteredMessages=useMemo(()=>messages.filter(m=>!searchQuery.trim()||m.text.toLowerCase().includes(searchQuery.toLowerCase())||m.name.toLowerCase().includes(searchQuery.toLowerCase())),[messages,searchQuery]);
+
+  const runGlobalSearch=async(query:string)=>{
+    if(!supabase||!workspaceId||!query.trim()){setSearchResults([]);return;}
+    setSearchBusy(true);
+    try{
+      const ids=Object.values(channelIds);
+      const [messageResult,dmResult]=await Promise.all([
+        ids.length?supabase.from('messages').select('id,content,created_at,author_id,channel_id').in('channel_id',ids).ilike('content','%'+query.trim()+'%').order('created_at',{ascending:false}).limit(40):Promise.resolve({data:[],error:null}),
+        dmConversations.length?supabase.from('dm_messages').select('id,content,created_at,sender_id,conversation_id').in('conversation_id',dmConversations.map(c=>c.id)).ilike('content','%'+query.trim()+'%').order('created_at',{ascending:false}).limit(30):Promise.resolve({data:[],error:null})
+      ]);
+      if(messageResult.error)throw messageResult.error;if(dmResult.error)throw dmResult.error;
+      const authorIds=[...new Set([...(messageResult.data||[]).map((m:any)=>m.author_id),...(dmResult.data||[]).map((m:any)=>m.sender_id)])];
+      const {data:people,error:peopleError}=authorIds.length?await supabase.from('profiles').select('id,display_name').in('id',authorIds):{data:[],error:null};
+      if(peopleError)throw peopleError;
+      const names:Record<string,string>={};(people||[]).forEach((p:any)=>names[p.id]=p.display_name);
+      const channelNames:Record<string,string>={};Object.entries(channelIds).forEach(([name,id])=>channelNames[id]=name);
+      const rows=[...(messageResult.data||[]).map((m:any)=>({...m,kind:'channel',author:names[m.author_id]||'사용자',location:'#'+(channelNames[m.channel_id]||'채널')})),...(dmResult.data||[]).map((m:any)=>({...m,kind:'dm',author:names[m.sender_id]||'사용자',location:'DM · '+(dmConversations.find(c=>c.id===m.conversation_id)?.person?.display_name||'대화')}))];
+      rows.sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime());setSearchResults(rows);
+    }catch(e:any){notify('전체 검색 실패: '+(e?.message||'오류'));setSearchResults([]);}finally{setSearchBusy(false);}
+  };
+  useEffect(()=>{
+    if(!searchOpen)return;const q=searchQuery.trim();if(!q){setSearchResults([]);return;}
+    const timer=window.setTimeout(()=>runGlobalSearch(q),250);return()=>window.clearTimeout(timer);
+  },[searchOpen,searchQuery,workspaceId,channelIds,dmConversations]);
+  const switchWorkspace=async(id:string)=>{
+    if(!supabase)return;const {data:rows,error}=await supabase.from('channels').select('id,name').eq('workspace_id',id).order('created_at');
+    if(error){notify('워크스페이스 전환 실패: '+error.message);return;}
+    const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
+    setWorkspaceId(id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));if(rows?.[0])setActiveChannel(rows[0].name);
+    setSection('messages');setWorkspaceMenuOpen(false);setMobilePanel('none');setActiveDm(null);setDmMessages([]);setMessages([]);
+  };
+  const createWorkspace=async()=>{
+    const name=workspaceDraft.trim();if(!name){notify('워크스페이스 이름을 입력해 주세요.');return;}
+    if(!supabase||!currentUser||workspaceBusy)return;setWorkspaceBusy(true);
+    try{
+      const {data:workspace,error}=await supabase.from('workspaces').insert({name,owner_id:currentUser.id}).select('id,name,owner_id').single();if(error)throw error;
+      const {error:memberError}=await supabase.from('workspace_members').insert({workspace_id:workspace.id,user_id:currentUser.id,role:'owner'});if(memberError)throw memberError;
+      const defaults=['general','announcements','development','random'].map(channel=>({workspace_id:workspace.id,name:channel,created_by:currentUser.id}));
+      const {data:createdChannels,error:channelError}=await supabase.from('channels').insert(defaults).select('id,name');if(channelError)throw channelError;
+      setWorkspaces(v=>[...v,workspace]);const map:Record<string,string>={};(createdChannels||[]).forEach((c:any)=>map[c.name]=c.id);
+      setWorkspaceId(workspace.id);setChannelIds(map);setChannels((createdChannels||[]).map((c:any)=>c.name));setActiveChannel('general');setSection('messages');setWorkspaceDraft('');setWorkspaceMenuOpen(false);notify('워크스페이스를 만들었습니다.');
+    }catch(e:any){notify('워크스페이스 생성 실패: '+(e?.message||'오류'));}finally{setWorkspaceBusy(false);}
+  };
 
   const sendMessage=async()=>{
     const content=message.trim();if(!content)return;
