@@ -993,3 +993,17 @@ body{background:var(--nx-bg);color:#f2f3f5}
   .message-body p{font-size:12px}
   .composer-wrap{padding:8px 12px 12px}
 }
+
+
+/* Channel message interactions */
+.message-actions{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:8px;opacity:.78}
+.message-actions button{border:1px solid #41434b;background:#2b2d31;color:#b5bac1;border-radius:7px;padding:4px 8px;font-size:10px;min-height:27px}
+.message-actions button:hover,.message-actions button.reaction-active{background:#3b3f79;border-color:#5865f2;color:#fff}
+.message-actions .message-delete{color:#ff8b8b}
+.message-edited{font-size:9px;color:#7f8792}
+.message-pin-label{font-size:9px;color:#f0c674}
+.message-pinned{background:#34363d;border-radius:9px;padding:8px;margin-left:-8px;margin-right:-8px}
+.message-reply-ref{font-size:10px;color:#a5a9b1;border-left:2px solid #5865f2;padding:3px 8px;margin:6px 0 2px}
+.composer-context{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;margin:0 0 6px;border:1px solid #41434b;background:#2b2d31;border-radius:8px;color:#c5c8ce;font-size:10px}
+.composer-context button{border:0;background:transparent;color:#b7baff;font-size:10px;padding:3px 6px}
+@media(max-width:760px){.message-actions{opacity:1;gap:4px}.message-actions button{min-height:30px;padding:5px 8px;font-size:10px}.message-pinned{margin-left:-5px;margin-right:-5px}}
