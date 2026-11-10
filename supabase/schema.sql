@@ -394,3 +394,26 @@ alter table public.profiles
   add column if not exists theme_color text not null default '#7867e8',
   add column if not exists last_seen_at timestamptz;
 
+
+-- Persisted workspace meeting schedule.
+create table if not exists public.scheduled_meetings (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  created_by uuid not null references auth.users(id) on delete cascade,
+  title text not null check (char_length(title) between 1 and 120),
+  starts_at timestamptz not null,
+  meeting_code text not null unique default upper(substr(replace(gen_random_uuid()::text,'-',''),1,8)),
+  created_at timestamptz not null default now()
+);
+create index if not exists scheduled_meetings_workspace_start_idx on public.scheduled_meetings(workspace_id,starts_at);
+alter table public.scheduled_meetings enable row level security;
+grant select,insert,delete on public.scheduled_meetings to authenticated;
+drop policy if exists scheduled_meetings_select_member on public.scheduled_meetings;
+create policy scheduled_meetings_select_member on public.scheduled_meetings
+for select to authenticated using (private.is_workspace_member(workspace_id));
+drop policy if exists scheduled_meetings_insert_member on public.scheduled_meetings;
+create policy scheduled_meetings_insert_member on public.scheduled_meetings
+for insert to authenticated with check (created_by=(select auth.uid()) and private.is_workspace_member(workspace_id));
+drop policy if exists scheduled_meetings_delete_creator on public.scheduled_meetings;
+create policy scheduled_meetings_delete_creator on public.scheduled_meetings
+for delete to authenticated using (created_by=(select auth.uid()) or private.is_workspace_admin(workspace_id));
