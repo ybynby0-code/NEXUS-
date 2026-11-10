@@ -285,12 +285,12 @@ function WorkspaceApp() {
       const recipientId=activeDm.member_one===currentUser.id?activeDm.member_two:activeDm.member_one;
       const senderName=profile.display_name||currentUser.name;
       const preview=content.length>180?content.slice(0,177)+'…':content;
+      const dmTitle=senderName+'님의 새 메시지';
+      void supabase.from('notifications').insert({recipient_id:recipientId,actor_id:currentUser.id,type:'dm',title:dmTitle,body:preview,target_id:activeDm.id,source_id:data.id})
+        .then(({error:noticeError})=>{if(noticeError)console.warn('[NEXUS DM notification]',noticeError);});
       void supabase.functions.invoke('nexus-push',{body:{
-        recipient_id:recipientId,
-        conversation_id:activeDm.id,
-        title:senderName+'님의 새 메시지',
-        body:preview,
-        tag:'nexus-dm-'+data.id,
+        kind:'dm',recipient_id:recipientId,conversation_id:activeDm.id,
+        title:dmTitle,body:preview,tag:'nexus-dm-'+data.id,
         url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)
       }}).then(({error:pushError})=>{
         if(pushError)console.warn('[NEXUS DM push]',pushError);
@@ -371,7 +371,7 @@ function WorkspaceApp() {
     setPendingOutgoingCall(null);
     const {error}=await supabase.from('notifications').insert({recipient_id:pending.recipient,actor_id:currentUser.id,type:'call',title:pending.title,body:pending.body,target_id:pending.conversationId});
     if(error){notify('통화방은 열렸지만 초대 알림 전송에 실패했습니다: '+error.message);return;}
-    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:pending.recipient,title:pending.title,body:pending.body,conversation_id:pending.conversationId,url:'./?section=meetings&call='+pending.code}});if(pushError)console.warn('[NEXUS call push]',pushError);}catch(e){console.warn('[NEXUS call push]',e);}
+    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'call',recipient_id:pending.recipient,title:pending.title,body:pending.body,conversation_id:pending.conversationId,url:'./?section=meetings&call='+pending.code}});if(pushError)console.warn('[NEXUS call push]',pushError);}catch(e){console.warn('[NEXUS call push]',e);}
     notify('통화 요청을 보냈습니다. 상대방이 받으면 연결됩니다.');
   };
   const sendPing=async()=>{
@@ -379,7 +379,7 @@ function WorkspaceApp() {
     const recipient=activeDm.person.id;
     const {error}=await supabase.from('notifications').insert({recipient_id:recipient,actor_id:currentUser.id,type:'ping',title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',target_id:activeDm.id});
     if(error){notify('핑 전송 실패: '+error.message);return;}
-    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',conversation_id:activeDm.id,url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)}});if(pushError)console.warn('[NEXUS push]',pushError);}catch(e){console.warn('[NEXUS push]',e);}
+    try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'ping',recipient_id:recipient,title:'NEXUS 핑',body:(profile.display_name||currentUser.name)+'님이 회원님을 호출했습니다.',conversation_id:activeDm.id,url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)}});if(pushError)console.warn('[NEXUS push]',pushError);}catch(e){console.warn('[NEXUS push]',e);}
     notify('핑을 보냈습니다. 푸시 알림을 등록한 기기에서는 앱이 백그라운드여도 시스템 알림이 표시됩니다.');
   };
   useEffect(()=>{
@@ -458,8 +458,15 @@ function WorkspaceApp() {
       const {error:deleteError}=await supabase.from('friend_requests').delete().eq('id',existing.id);
       if(deleteError){notify('이전 요청 정리 실패: '+deleteError.message);return;}
     }
-    const {error}=await supabase.from('friend_requests').insert({sender_id:currentUser.id,recipient_id:id});
+    const {data:request,error}=await supabase.from('friend_requests').insert({sender_id:currentUser.id,recipient_id:id}).select('id').single();
     if(error){notify('친구 요청 실패: '+error.message);return;}
+    const senderName=profile.display_name||currentUser.name;
+    const title=senderName+'님이 친구 요청을 보냈습니다.';
+    const body='NEXUS에서 친구 요청을 확인해 주세요.';
+    const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:id,actor_id:currentUser.id,type:'friend_request',title,body,source_id:request.id});
+    if(noticeError)console.warn('[NEXUS friend notification]',noticeError);
+    else void supabase.functions.invoke('nexus-push',{body:{kind:'friend_request',recipient_id:id,resource_id:request.id,title,body,tag:'nexus-friend-'+request.id,url:'./?section=community'}})
+      .then(({error:pushError})=>{if(pushError)console.warn('[NEXUS friend push]',pushError);});
     notify('친구 요청을 보냈습니다.');setFriendResults(v=>v.filter(p=>p.id!==id));loadFriendData();
   };
   const respondFriendRequest=async(id:string,status:'accepted'|'rejected')=>{
@@ -557,7 +564,7 @@ function WorkspaceApp() {
     }
     const recipients=[...recipientMap.values()];
     setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
-    for(const target of recipients){const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';const body=content.length>140?content.slice(0,137)+'...':content;const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId});if(noticeError){console.warn('[NEXUS mention notification]',noticeError);continue;}try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{recipient_id:target.user_id,title,body,conversation_id:channelId,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)}});if(pushError)console.warn('[NEXUS mention push]',pushError);}catch(e){console.warn('[NEXUS mention push]',e);}}
+    for(const target of recipients){const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';const body=content.length>140?content.slice(0,137)+'...':content;const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId,source_id:data?.id});if(noticeError){console.warn('[NEXUS mention notification]',noticeError);continue;}try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'mention',recipient_id:target.user_id,title,body,conversation_id:channelId,resource_id:data?.id,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)}});if(pushError)console.warn('[NEXUS mention push]',pushError);}catch(e){console.warn('[NEXUS mention push]',e);}}
   };
   const toggleMessageReaction=async(m:ChatMessage,emoji:string)=>{
     if(!supabase||!currentUser)return;const existing=(m.reactions||[]).find(x=>x.user_id===currentUser.id&&x.emoji===emoji);
