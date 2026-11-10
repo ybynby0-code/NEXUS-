@@ -127,9 +127,9 @@ function WorkspaceApp() {
     let alive=true;const channelId=channelIds[activeChannel];
     const load=async()=>{
       setMessages([]);
-      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id').eq('channel_id',channelId).order('created_at').limit(100);
+      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id') .eq('channel_id',channelId).order('created_at',{ascending:false}).limit(100);
       if(error)throw error;
-      const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name').in('id',ids):{data:[]};const names:Record<string,string>={};(profiles||[]).forEach((p:any)=>names[p.id]=p.display_name);if(alive)setMessages((data||[]).map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':names[m.author_id]||'사용자',initials:(m.author_id===currentUser?.id?'나':names[m.author_id]||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
+      const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];const {data:profiles}=ids.length?await supabase.from('profiles').select('id,display_name').in('id',ids):{data:[]};const names:Record<string,string>={};(profiles||[]).forEach((p:any)=>names[p.id]=p.display_name);if(alive)setMessages([...(data||[])].reverse().map((m:any)=>({id:m.id,name:m.author_id===currentUser?.id?'나':names[m.author_id]||'사용자',initials:(m.author_id===currentUser?.id?'나':names[m.author_id]||'U').slice(0,1),color:m.author_id===currentUser?.id?'orange':'blue',time:new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:m.content,author_id:m.author_id})));
     };
     load().catch(e=>notify('메시지 조회 실패: '+e.message));
     const sub=supabase.channel('nexus-'+channelId).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'channel_id=eq.'+channelId},async(payload:any)=>{
@@ -160,6 +160,8 @@ function WorkspaceApp() {
     const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
     setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
   };
+  useEffect(()=>{if(section==='dms'&&currentUser)loadDmConversations();},[section,currentUser?.id]);
+
   const openDm=async(person:any)=>{
     if(!supabase||!currentUser)return;
     const pair=[currentUser.id,person.id].sort();
@@ -171,8 +173,9 @@ function WorkspaceApp() {
   const sendDm=async()=>{
     const content=dmDraft.trim();if(!content||!supabase||!currentUser||!activeDm)return;
     setDmDraft('');
-    const {error}=await supabase.from('dm_messages').insert({conversation_id:activeDm.id,sender_id:currentUser.id,content});
-    if(error){setDmDraft(content);notify('DM 전송 실패: '+error.message);}
+    const {data,error}=await supabase.from('dm_messages').insert({conversation_id:activeDm.id,sender_id:currentUser.id,content}).select('id,sender_id,content,created_at,read_at').single();
+    if(error){setDmDraft(content);notify('DM 전송 실패: '+error.message);return;}
+    if(data)setDmMessages(v=>v.some(m=>m.id===data.id)?v:[...v,data]);
   };
   const loadNotifications=async()=>{
     if(!supabase||!currentUser)return;
@@ -228,9 +231,9 @@ function WorkspaceApp() {
       if(alive)setDmMessages(v=>v.map(m=>unread.includes(m.id)?{...m,read_at:at}:m));
     };
     const load=async()=>{
-      const {data,error}=await supabase.from('dm_messages').select('id,sender_id,content,created_at,read_at').eq('conversation_id',activeDm.id).order('created_at').limit(100);
+      const {data,error}=await supabase.from('dm_messages').select('id,sender_id,content,created_at,read_at').eq('conversation_id',activeDm.id).order('created_at',{ascending:false}).limit(100);
       if(error)throw error;
-      if(alive)setDmMessages(data||[]);
+      if(alive)setDmMessages([...(data||[])].reverse());
       await markIncomingRead(data||[]);
     };
     load().catch(e=>notify('DM 불러오기 실패: '+e.message));
@@ -340,8 +343,9 @@ function WorkspaceApp() {
     const channelId=channelIds[activeChannel];
     if(!supabase||!currentUser||!channelId){notify('서버 연결이 준비되지 않았습니다.');return;}
     setMessage('');
-    const {error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content});
-    if(error){setMessage(content);notify('전송 실패: '+error.message);}
+    const {data,error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content}).select('id,content,created_at,author_id').single();
+    if(error){setMessage(content);notify('전송 실패: '+error.message);return;}
+    if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id}]);
   };
   const askAi=()=>{
     const text=aiPrompt.trim();if(!text)return;
