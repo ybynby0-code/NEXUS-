@@ -336,3 +336,54 @@ create policy workspace_members_select_owner_admin on public.workspace_members f
  private.is_workspace_admin(workspace_id)
  or exists(select 1 from public.workspaces w where w.id=workspace_id and w.owner_id=(select auth.uid()))
 );
+
+-- NEXUS corrective policies: bind every membership check to the row's workspace.
+create or replace function private.is_workspace_member(p_workspace_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.workspace_members wm
+    where wm.workspace_id = p_workspace_id
+      and wm.user_id = (select auth.uid())
+  );
+$$;
+revoke all on function private.is_workspace_member(uuid) from public, anon;
+grant execute on function private.is_workspace_member(uuid) to authenticated;
+
+drop policy if exists workspace_members_select_owner_admin on public.workspace_members;
+drop policy if exists workspace_members_select_self on public.workspace_members;
+drop policy if exists workspace_members_select_workspace_member on public.workspace_members;
+create policy workspace_members_select_workspace_member on public.workspace_members
+for select to authenticated using (private.is_workspace_member(workspace_id));
+
+drop policy if exists workspace_files_select_member on public.workspace_files;
+create policy workspace_files_select_member on public.workspace_files
+for select to authenticated using (
+  exists (select 1 from public.workspace_members wm
+    where wm.workspace_id = workspace_files.workspace_id
+      and wm.user_id = (select auth.uid()))
+);
+drop policy if exists workspace_files_insert_member on public.workspace_files;
+create policy workspace_files_insert_member on public.workspace_files
+for insert to authenticated with check (
+  uploaded_by = (select auth.uid())
+  and exists (select 1 from public.workspace_members wm
+    where wm.workspace_id = workspace_files.workspace_id
+      and wm.user_id = (select auth.uid()))
+);
+
+drop policy if exists workspace_invites_select_owner_or_invitee on public.workspace_invites;
+create policy workspace_invites_select_owner_or_invitee on public.workspace_invites
+for select to authenticated using (
+  lower(email) = lower(coalesce(auth.jwt() ->> 'email',''))
+  or exists (
+    select 1 from public.workspace_members wm
+    where wm.workspace_id = workspace_invites.workspace_id
+      and wm.user_id = (select auth.uid())
+      and wm.role in ('owner','admin')
+  )
+  or exists (
+    select 1 from public.workspaces w
+    where w.id = workspace_invites.workspace_id
+      and w.owner_id = (select auth.uid())
+  )
+);
