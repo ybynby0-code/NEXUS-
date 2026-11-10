@@ -127,6 +127,6 @@ export default function CallRoom({supabase,userId,initialCreateCode,initialJoinC
       <div className="call-code"><span>초대 코드 <strong>{roomCode}</strong></span><button className="secondary-action" onClick={copyCode}><Copy size={14}/> 코드 복사</button></div>
       <div className="call-videos"><div className="call-video-card"><video ref={localVideo} autoPlay playsInline muted/><span>내 화면</span></div><div className="call-video-card remote">{remoteReady?<video ref={remoteVideo} autoPlay playsInline/>:<div className="call-waiting">상대방 연결 대기 중</div>}<span>상대방</span></div></div>
       <div className="call-controls"><button className={muted?'off':''} onClick={toggleMic}>{muted?<MicOff size={18}/>:<Mic size={18}/>}<span>{muted?'마이크 켜기':'마이크 끄기'}</span></button><button className={cameraOff?'off':''} onClick={toggleCamera}>{cameraOff?<VideoOff size={18}/>:<Video size={18}/>}<span>{cameraOff?'카메라 켜기':'카메라 끄기'}</span></button><button className="hangup" onClick={leave}><PhoneOff size={18}/><span>통화 종료</span></button></div>
-    </>}</>
+    </>}
   </div>;
 }
