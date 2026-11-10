@@ -393,9 +393,9 @@ function WorkspaceApp() {
     loadDmConversations();loadNotifications();
     const sub=supabase.channel('nexus-notifications-'+currentUser.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'recipient_id=eq.'+currentUser.id},(payload:any)=>{
       const n=payload.new;setNotifications(v=>[n,...v]);
-      if((n.type==='ping'||n.type==='call'||n.type==='mention')&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
+      if((n.type==='ping'||n.type==='call'||n.type==='mention'||n.type==='friend_request')&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
       const callCode=n.type==='call'?(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1]:null;
-      const targetUrl=n.type==='mention'?'./?section=messages&channel='+encodeURIComponent(n.target_id||''):callCode?'./?section=meetings&call='+callCode:'./?section=dms&conversation='+encodeURIComponent(n.target_id||'');
+      const targetUrl=n.type==='mention'?'./?section=messages&channel='+encodeURIComponent(n.target_id||''):n.type==='friend_request'?'./?section=community':n.type==='admin'?'./?section=home':callCode?'./?section=meetings&call='+callCode:'./?section=dms&conversation='+encodeURIComponent(n.target_id||'');
       if('Notification' in window&&Notification.permission==='granted'){
         navigator.serviceWorker?.ready.then(async reg=>{
           const subscription=await reg.pushManager.getSubscription().catch(()=>null);
