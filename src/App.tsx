@@ -804,7 +804,7 @@ function WorkspaceApp() {
   };
   const previewWorkspaceFile=async(file:any)=>{
     if(!supabase||filePreviewBusy)return;
-    const supported=/^(image\\/|video\\/|audio\\/|application\\/pdf$)/i.test(String(file.mime_type||''));
+    const supported=/^(image\/|video\/|audio\/|application\/pdf$)/i.test(String(file.mime_type||''));
     if(!supported){notify('미리보기를 지원하지 않는 파일 형식입니다.');return;}
     setFilePreviewBusy(true);
     const {data,error}=await supabase.storage.from('nexus-files').createSignedUrl(file.storage_path,300);
@@ -955,7 +955,7 @@ function WorkspaceApp() {
         <div className="feature-heading"><div><div className="eyebrow">FILES & DOCUMENTS</div><h1>파일 및 문서</h1><p>워크스페이스 멤버와 파일을 공유합니다. 파일은 비공개 저장소에 보관됩니다.</p></div><button className="primary-action" disabled={filesBusy||!dbReady} onClick={()=>fileInput.current?.click()}><Upload size={16}/> {filesBusy?'업로드 중...':'파일 업로드'}</button></div>
         <input ref={fileInput} type="file" multiple hidden onChange={e=>addFiles(e.target.files)}/>
         <div className="upload-zone" onClick={()=>!filesBusy&&fileInput.current?.click()}><FolderOpen size={30}/><strong>{filesBusy?'파일을 업로드하고 있습니다':'파일을 선택하거나 여기를 누르세요'}</strong><span>최대 파일 크기 25MB · 로그인한 워크스페이스 멤버만 접근할 수 있습니다.</span></div>
-        <div className="section-card"><div className="card-title"><FileText size={18}/>공유 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">공유된 파일이 없습니다.</div>:files.map(file=><div className="file-row" key={file.id}><div className="file-type"><FileText size={17}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB · {new Date(file.created_at).toLocaleString('ko-KR')}</small></div>{/^(image\\/|video\\/|audio\\/|application\\/pdf$)/i.test(String(file.mime_type||''))&&<button className="secondary-action" disabled={filePreviewBusy} onClick={()=>previewWorkspaceFile(file)}>미리보기</button>}<button className="secondary-action" onClick={()=>downloadWorkspaceFile(file)}>다운로드</button>{file.uploaded_by===currentUser?.id&&<button className="secondary-action" onClick={()=>deleteWorkspaceFile(file)}>삭제</button>}</div>)}</div>
+        <div className="section-card"><div className="card-title"><FileText size={18}/>공유 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">공유된 파일이 없습니다.</div>:files.map(file=><div className="file-row" key={file.id}><div className="file-type"><FileText size={17}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB · {new Date(file.created_at).toLocaleString('ko-KR')}</small></div>{/^(image\/|video\/|audio\/|application\/pdf$)/i.test(String(file.mime_type||''))&&<button className="secondary-action" disabled={filePreviewBusy} onClick={()=>previewWorkspaceFile(file)}>미리보기</button>}<button className="secondary-action" onClick={()=>downloadWorkspaceFile(file)}>다운로드</button>{file.uploaded_by===currentUser?.id&&<button className="secondary-action" onClick={()=>deleteWorkspaceFile(file)}>삭제</button>}</div>)}</div>
       </section>}
       <footer className="status-footer"><span><i/>{serverApiReady?"시스템 연결됨":dbReady?"데이터베이스 연결됨":"연결 확인 중"}</span><span>SUPABASE · SEOUL</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
     </main>
