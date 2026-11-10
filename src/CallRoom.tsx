@@ -83,8 +83,8 @@ export default function CallRoom({supabase,userId}:Props) {
       activeRef.current=false;setActive(false);
     }
   };
-  const createRoom=()=>connect(crypto.randomUUID().replace(/-/g,'').slice(0,8).toUpperCase(),true);
-  const joinRoom=()=>{const code=joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length<6){setError('초대 코드를 확인해 주세요.');return;}void connect(code,false);};
+  const createRoom=()=>connect(crypto.randomUUID().replace(/-/g,'').slice(0,16).toUpperCase(),true);
+  const joinRoom=()=>{const code=joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length<12){setError('초대 코드를 확인해 주세요.');return;}void connect(code,false);};
   const leave=async()=>{
     await sendSignal({kind:'leave'});
     activeRef.current=false;streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;
@@ -103,7 +103,7 @@ export default function CallRoom({supabase,userId}:Props) {
     {error&&<div className="call-error">{error}</div>}
     {!active?<div className="call-entry">
       <div className="call-entry-card"><Video size={24}/><h3>새 1:1 화상 회의</h3><p>회의방을 만든 뒤 8자리 초대 코드를 상대방에게 전달하세요.</p><button className="primary-action" onClick={createRoom} disabled={!supabase}><Phone size={15}/> 회의방 만들기</button></div>
-      <div className="call-entry-card"><Phone size={24}/><h3>초대 코드로 참여</h3><p>상대방에게 받은 회의 코드를 입력하세요.</p><input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} maxLength={8} placeholder="예: A1B2C3D4"/><button className="secondary-action" onClick={joinRoom} disabled={!supabase}>참여하기</button></div>
+      <div className="call-entry-card"><Phone size={24}/><h3>초대 코드로 참여</h3><p>상대방에게 받은 회의 코드를 입력하세요.</p><input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} maxLength={16} placeholder="16자리 초대 코드"/><button className="secondary-action" onClick={joinRoom} disabled={!supabase}>참여하기</button></div>
     </div>:<>
       <div className="call-code"><span>초대 코드 <strong>{roomCode}</strong></span><button className="secondary-action" onClick={copyCode}><Copy size={14}/> 코드 복사</button></div>
       <div className="call-videos"><div className="call-video-card"><video ref={localVideo} autoPlay playsInline muted/><span>내 화면</span></div><div className="call-video-card remote">{remoteReady?<video ref={remoteVideo} autoPlay playsInline/>:<div className="call-waiting">상대방 연결 대기 중</div>}<span>상대방</span></div></div>
