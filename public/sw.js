@@ -4,7 +4,7 @@ self.addEventListener('activate',event=>{event.waitUntil(self.clients.claim());}
 self.addEventListener('push',event=>{
   let data={title:'NEXUS',body:'새로운 알림이 있습니다.',url:'./'};
   try{data={...data,...(event.data?event.data.json():{})};}catch{}
-  event.waitUntil(self.registration.showNotification(data.title,{body:data.body,icon:'./icons/nexus.svg',badge:'./icons/nexus.svg',tag:data.tag||'nexus-notification',data:{url:data.url||'./'},renotify:true,vibrate:data.vibrate||[180]}));
+  event.waitUntil(self.registration.showNotification(data.title,{body:data.body,icon:'./icons/nexus.svg',badge:'./icons/nexus.svg',tag:data.tag||'nexus-notification',data:{url:data.url||'./'},renotify:false,vibrate:data.vibrate||[180]}));
 });
 self.addEventListener('notificationclick',event=>{
   event.notification.close();
