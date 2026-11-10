@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import CallRoom from './CallRoom';
+import AdminPanel from './AdminPanel';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen } from 'lucide-react';
 
-type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files';
+type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string };
 const initialChannels = ['general', 'announcements', 'development', 'random'];
 const initialMessages: ChatMessage[] = [];
@@ -20,6 +21,7 @@ function WorkspaceApp() {
   const [message,setMessage] = useState('');
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
   const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string}|null>(null);
+  const [adminRole,setAdminRole] = useState<string|null>(null);
   const [workspaceId,setWorkspaceId] = useState<string|null>(null);
   const [channelIds,setChannelIds] = useState<Record<string,string>>({});
   const [dbReady,setDbReady] = useState(false);
@@ -97,6 +99,8 @@ function WorkspaceApp() {
       const isDeveloperAccount=String(user.email||'').toLowerCase()==='ybynby0@gmail.com';
       const displayName=isDeveloperAccount?'레인보우':String(user.user_metadata?.display_name||user.email?.split('@')[0]||'NEXUS 사용자');
       if(alive)setCurrentUser({id:user.id,name:displayName,email:user.email||''});
+      const {data:adminAccess}=await supabase.from('app_admins').select('role').eq('user_id',user.id).maybeSingle();
+      if(alive)setAdminRole(adminAccess?.role||null);
       const {error:profileError}=await supabase.from('profiles').upsert({id:user.id,display_name:displayName},{onConflict:'id'});
       const {data:profileRow}=await supabase.from('profiles').select('display_name,bio,avatar_url,theme_color,banner_url,theme_background_url,profile_decoration,theme_mode').eq('id',user.id).maybeSingle();
       if(profileRow&&alive)setProfile({display_name:profileRow.display_name||displayName,bio:profileRow.bio||'',avatar_url:profileRow.avatar_url||'',banner_url:profileRow.banner_url||'',theme_background_url:profileRow.theme_background_url||'',theme_color:profileRow.theme_color||'#7867e8',profile_decoration:profileRow.profile_decoration||'none',theme_mode:profileRow.theme_mode||'dark'});
@@ -594,6 +598,7 @@ function WorkspaceApp() {
       <button className={`side-link ${section==='community'?'selected':''}`} onClick={()=>setSection('community')}><Compass size={17}/>커뮤니티</button>
       <button className={`side-link ${section==='meetings'?'selected':''}`} onClick={()=>setSection('meetings')}><Video size={17}/>회의 및 통화</button>
       <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>setSection('files')}><FileText size={17}/>파일 및 문서</button>
+      {adminRole&&<button className={`side-link admin-nav-link ${section==='admin'?'selected':''}`} onClick={()=>{setSection('admin');setMobilePanel('none')}}><ShieldCheck size={17}/>관리자 센터</button>}
       <div className="side-label channels-label">채널 <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
       <div className="side-bottom"><div className="online-dot"/><span>실시간 접속</span><span className="online-text">{onlineCount}명</span></div>
@@ -604,11 +609,11 @@ function WorkspaceApp() {
     <main className="main-area">
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
-        <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':'파일 및 문서'}</strong></div>
+        <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':section==='admin'?'관리자 센터':'파일 및 문서'}</strong></div>
         <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
 
-      {section==='messages'?<div className="content-grid">
+      {section==='admin'&&adminRole?<AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify}/>:section==='messages'?<div className="content-grid">
         <section className="chat-panel">
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
