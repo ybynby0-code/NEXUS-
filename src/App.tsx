@@ -656,7 +656,7 @@ function WorkspaceApp() {
         </div>
             </section>:section==='meetings'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>초대 코드로 연결하는 실시간 1:1 음성·화상 통화입니다.</p></div></div>
-        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')}/ >}
+        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')}/>}
         <div className="section-card schedule-card">
           <div className="card-title"><CalendarDays size={18}/>회의 예약</div>
           <div className="schedule-form"><input value={meetingTitle} onChange={e=>setMeetingTitle(e.target.value)} maxLength={120} placeholder="회의 제목"/><input type="datetime-local" value={meetingTime} onChange={e=>setMeetingTime(e.target.value)}/><button className="primary-action" onClick={scheduleMeeting} disabled={meetingBusy||!dbReady}>{meetingBusy?'저장 중...':'일정 추가'}</button></div>
