@@ -5,7 +5,7 @@ import CallRoom from './CallRoom';
 import AdminPanel from './AdminPanel';
 import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2 } from 'lucide-react';
 
-type Section = 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
+type Section = 'home' | 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatReaction = { id:string; emoji:string; user_id:string };
 type WorkspaceRole = {id:string;name:string;color:string;permissions:Record<string,boolean>;position:number};
 type ChatMessage = { id:string; name:string; initials:string; color:string; time:string; text:string; author_id?:string; parent_message_id?:string|null; pinned_at?:string|null; edited_at?:string|null; reactions?:ChatReaction[] };
@@ -13,7 +13,7 @@ const initialChannels = ['general', 'announcements', 'development', 'random'];
 const initialMessages: ChatMessage[] = [];
 
 function WorkspaceApp() {
-  const [section,setSection] = useState<Section>('messages');
+  const [section,setSection] = useState<Section>('home');
   const [activeChannel,setActiveChannel] = useState('general');
   const [channels,setChannels] = useState(initialChannels);
   const [workspaces,setWorkspaces] = useState<any[]>([]);
@@ -731,23 +731,27 @@ function WorkspaceApp() {
 
       <button className="workspace-switch" onClick={()=>setWorkspaceMenuOpen(v=>!v)} aria-expanded={workspaceMenuOpen}><div className="workspace-icon">N<span>•</span></div><div><strong>{workspaces.find(w=>w.id===workspaceId)?.name||'NEXUS'}</strong><small>팀 작업 공간</small></div><ChevronDown size={16}/></button>{workspaceMenuOpen&&<div className="workspace-menu">{workspaces.map(w=><button key={w.id} className={w.id===workspaceId?'active':''} onClick={()=>switchWorkspace(w.id)}>{w.name}{w.id===workspaceId&&<Check size={14}/>}</button>)}<div className="workspace-create"><input value={workspaceDraft} onChange={e=>setWorkspaceDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createWorkspace()} placeholder="새 워크스페이스 이름" maxLength={80}/><button onClick={createWorkspace} disabled={workspaceBusy}><Plus size={14}/></button></div></div>}
       <button className="sidebar-search" onClick={()=>setSearchOpen(true)}><Search size={15}/><span>빠른 검색</span><kbd>Ctrl K</kbd></button>
-      <div className="side-label">내 워크스페이스 <button aria-label="워크스페이스 추가" onClick={()=>setWorkspaceMenuOpen(true)}><Plus size={15}/></button></div>
-      <button className={`side-link ${section==='messages'?'selected':''}`} onClick={()=>setSection('messages')}><MessageCircle size={17}/>메시지 </button>
-      <button className={`side-link ${section==='dms'?'selected':''}`} onClick={()=>setSection('dms')}><MessageCircle size={17}/>DM</button>
-      <button className={`side-link ${section==='community'?'selected':''}`} onClick={()=>setSection('community')}><Compass size={17}/>커뮤니티</button>
-      <button className={`side-link ${section==='meetings'?'selected':''}`} onClick={()=>setSection('meetings')}><Video size={17}/>회의 및 통화</button>
-      <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>setSection('files')}><FileText size={17}/>파일 및 문서</button>
-      {adminRole&&<button className={`side-link admin-nav-link ${section==='admin'?'selected':''}`} onClick={()=>{setSection('admin');setMobilePanel('none')}}><ShieldCheck size={17}/>관리자 센터</button>}
+      <div className="side-label">시작하기</div>
+      <button className={`side-link ${section==='home'?'selected':''}`} onClick={()=>{setSection('home');setMobilePanel('none')}}><LayoutGrid size={17}/>홈 <span className="nav-hint">개요</span></button>
+      <div className="side-label">소통</div>
+      <button className={`side-link ${section==='messages'?'selected':''}`} onClick={()=>{setSection('messages');setMobilePanel('none')}}><MessageCircle size={17}/>채널 메시지</button>
+      <button className={`side-link ${section==='dms'?'selected':''}`} onClick={()=>{setSection('dms');setMobilePanel('none')}}><Users size={17}/>개인 메시지</button>
+      <button className={`side-link ${section==='community'?'selected':''}`} onClick={()=>{setSection('community');setMobilePanel('none')}}><Compass size={17}/>친구 및 멤버</button>
+      <div className="side-label">협업 도구</div>
+      <button className={`side-link ${section==='meetings'?'selected':''}`} onClick={()=>{setSection('meetings');setMobilePanel('none')}}><Video size={17}/>음성·영상 통화</button>
+      <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>{setSection('files');setMobilePanel('none')}}><FolderOpen size={17}/>파일 보관함</button>
+      <button className="side-link" onClick={()=>{setSettingsOpen(true);setMobilePanel('none')}}><Settings size={17}/>프로필 및 설정</button>
+      {adminRole&&<><div className="side-label">관리</div><button className={`side-link admin-nav-link ${section==='admin'?'selected':''}`} onClick={()=>{setSection('admin');setMobilePanel('none')}}><ShieldCheck size={17}/>관리자 센터</button></>}
       <div className="side-label channels-label">채널 <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
       {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
       <div className="side-bottom"><div className="online-dot"/><span>실시간 접속</span><span className="online-text">{onlineCount}명</span></div>
     </aside>
     <nav className="mobile-bottom-nav" aria-label="주요 메뉴">
+      <button className={section==='home'?'active':''} onClick={()=>setSection('home')}><LayoutGrid size={19}/><span>홈</span></button>
       <button className={section==='messages'?'active':''} onClick={()=>setSection('messages')}><MessageCircle size={19}/><span>채팅</span></button>
       <button className={section==='dms'?'active':''} onClick={()=>setSection('dms')}><Users size={19}/><span>DM</span></button>
-      <button className={section==='community'?'active':''} onClick={()=>setSection('community')}><Compass size={19}/><span>친구</span></button>
       <button className={section==='meetings'?'active':''} onClick={()=>setSection('meetings')}><Video size={19}/><span>통화</span></button>
-      <button className={section==='files'?'active':''} onClick={()=>setSection('files')}><FileText size={19}/><span>파일</span></button>
+      <button onClick={()=>setMobilePanel(v=>v==='nav'?'none':'nav')} aria-expanded={mobilePanel==='nav'}><MoreHorizontal size={19}/><span>더보기</span></button>
     </nav>
     <button className={`mobile-scrim ${mobilePanel==='nav'?'visible':''}`} aria-label="메뉴 닫기" onClick={()=>setMobilePanel('none')}/>
 
@@ -755,11 +759,24 @@ function WorkspaceApp() {
     <main className="main-area">
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
-        <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='messages'?'#'+activeChannel:section==='dms'?'DM':section==='community'?'커뮤니티':section==='meetings'?'회의 및 통화':section==='admin'?'관리자 센터':'파일 및 문서'}</strong></div>
+        <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='home'?'홈':section==='messages'?'#'+activeChannel:section==='dms'?'개인 메시지':section==='community'?'친구 및 멤버':section==='meetings'?'음성·영상 통화':section==='admin'?'관리자 센터':'파일 보관함'}</strong></div>
         <div className="top-actions"><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
 
-      {section==='admin'&&adminRole?<AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify}/>:section==='messages'?<div className="content-grid">
+      {section==='home'?<section className="feature-page home-page">
+        <div className="home-welcome"><div><div className="eyebrow">NEXUS WORKSPACE</div><h1>안녕하세요, {profile.display_name||currentUser?.name||'사용자'}님</h1><p>오늘 필요한 대화와 협업 도구를 한곳에서 시작하세요.</p></div><div className="home-status"><i/>{dbReady?'모든 서비스 연결됨':'서비스 연결 확인 중'}</div></div>
+        <div className="home-metrics"><button onClick={()=>setSection('messages')}><span className="home-metric-icon"><MessageCircle size={18}/></span><strong>{channels.length}</strong><small>채널</small></button><button onClick={()=>setSection('community')}><span className="home-metric-icon"><Users size={18}/></span><strong>{members.length}</strong><small>워크스페이스 멤버</small></button><button onClick={()=>setSection('meetings')}><span className="home-metric-icon"><Activity size={18}/></span><strong>{onlineCount}</strong><small>현재 접속 중</small></button></div>
+        <div className="home-section-title"><div><h2>빠른 실행</h2><p>자주 사용하는 기능으로 바로 이동합니다.</p></div></div>
+        <div className="home-actions">
+          <button className="home-action-card" onClick={()=>setSection('messages')}><span className="home-action-icon purple"><MessageCircle size={21}/></span><strong>채널에서 대화하기</strong><small>팀 채널에서 메시지를 주고받으세요.</small><b>열기 <span>→</span></b></button>
+          <button className="home-action-card" onClick={()=>setSection('dms')}><span className="home-action-icon blue"><Users size={21}/></span><strong>개인 메시지</strong><small>친구나 동료와 1:1로 대화하세요.</small><b>열기 <span>→</span></b></button>
+          <button className="home-action-card" onClick={()=>setSection('community')}><span className="home-action-icon green"><UserPlus size={21}/></span><strong>사람 초대하기</strong><small>친구를 찾고 워크스페이스에 초대하세요.</small><b>열기 <span>→</span></b></button>
+          <button className="home-action-card" onClick={()=>setSection('meetings')}><span className="home-action-icon orange"><Video size={21}/></span><strong>통화 시작하기</strong><small>음성 또는 영상으로 바로 연결하세요.</small><b>열기 <span>→</span></b></button>
+          <button className="home-action-card" onClick={()=>setSection('files')}><span className="home-action-icon teal"><FolderOpen size={21}/></span><strong>파일 공유하기</strong><small>자료를 업로드하고 함께 관리하세요.</small><b>열기 <span>→</span></b></button>
+          <button className="home-action-card" onClick={()=>{setSettingsOpen(true)}}><span className="home-action-icon pink"><Settings size={21}/></span><strong>내 공간 꾸미기</strong><small>프로필과 테마를 원하는 대로 설정하세요.</small><b>열기 <span>→</span></b></button>
+        </div>
+        <div className="home-bottom-grid"><div className="section-card"><div className="card-title"><Hash size={18}/>내 채널 <span>{channels.length}개</span></div>{channels.slice(0,6).map(ch=><button className="home-channel-row" key={ch} onClick={()=>{setActiveChannel(ch);setSection('messages')}}><Hash size={15}/><span>{ch}</span><b>열기 →</b></button>)}</div><div className="section-card"><div className="card-title"><CircleHelp size={18}/>처음 사용하시나요?</div><p className="home-help-copy">① 채널을 열어 인사를 남겨보세요.<br/>② 친구 및 멤버 메뉴에서 사람을 찾아보세요.<br/>③ 통화나 파일 공유로 협업을 시작할 수 있습니다.</p><button className="secondary-action" onClick={()=>setSection('community')}>친구 및 멤버 보기</button></div></div>
+      </section>:section==='admin'&&adminRole?<AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify}/>:section==='messages'?<div className="content-grid">
         <section className="chat-panel">
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
