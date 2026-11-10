@@ -797,3 +797,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .theme-light .main-area,.theme-light .sidebar{filter:brightness(1.13)}
 .theme-midnight .main-area,.theme-midnight .sidebar{filter:brightness(.78) saturate(1.12)}
 @media(max-width:520px){.profile-upload-grid{grid-template-columns:1fr}.theme-image-row{align-items:stretch;flex-direction:column}.theme-image-row button{width:100%;justify-content:center}.profile-custom-preview{min-height:118px}}
+
+
+.app-shell[style*="url("] .main-area,.app-shell[style*="url("] .sidebar{background:rgba(11,16,32,.82)!important;backdrop-filter:blur(16px)}
+.app-shell[style*="url("] .section-card,.app-shell[style*="url("] .chat-panel,.app-shell[style*="url("] .dm-chat{background:rgba(255,255,255,.92)}
+.dm-chat-head{min-height:66px;padding:10px 13px;border-radius:10px 10px 0 0;background-color:#151b2a;background-repeat:no-repeat}
