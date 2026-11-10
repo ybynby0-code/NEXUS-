@@ -577,3 +577,6 @@ body{background:var(--nx-bg);color:var(--nx-ink)}
 .scheduled-row small{font-size:9px;color:#88867b}
 .scheduled-row .secondary-action{display:inline-flex;align-items:center;gap:5px;padding:8px 9px;font-size:9px}
 @media(max-width:650px){.schedule-form{grid-template-columns:1fr}.scheduled-row{flex-wrap:wrap}.scheduled-row>div{flex:1 0 100%}}
+
+.ai-input-wrap button:disabled{opacity:.45;cursor:not-allowed}
+.ai-input-wrap small{line-height:1.5}
