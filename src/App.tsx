@@ -495,9 +495,9 @@ function WorkspaceApp() {
     }catch(e:any){notify('워크스페이스 생성 실패: '+(e?.message||'오류'));}finally{setWorkspaceBusy(false);}
   };
 
-  const updateMessageDraft=(value:string)=>{setMessage(value);const match=value.match(/(?:^|\\s)@([^\\s@]*)$/);setMentionQuery(match?match[1]:null);};
+  const updateMessageDraft=(value:string)=>{setMessage(value);const match=value.match(/(?:^|\s)@([^\s@]*)$/);setMentionQuery(match?match[1]:null);};
   const mentionCandidates=mentionQuery===null?[]:members.filter((m:any)=>m.user_id!==currentUser?.id&&String(m.person?.display_name||'').toLowerCase().includes(mentionQuery.toLowerCase())).slice(0,6);
-  const insertMention=(member:any)=>{const name=String(member.person?.display_name||'사용자').trim();const match=message.match(/(?:^|\\s)@([^\\s@]*)$/);const prefix=match?message.slice(0,message.length-match[0].length):message;const token='@'+name;updateMessageDraft(prefix+token+' ');setMentionSelections(v=>[...v.filter(x=>x.token!==token),{token,user_id:member.user_id}]);setMentionQuery(null);};
+  const insertMention=(member:any)=>{const name=String(member.person?.display_name||'사용자').trim();const match=message.match(/(?:^|\s)@([^\s@]*)$/);const prefix=match?message.slice(0,message.length-match[0].length):message;const token='@'+name;updateMessageDraft(prefix+token+' ');setMentionSelections(v=>[...v.filter(x=>x.token!==token),{token,user_id:member.user_id}]);setMentionQuery(null);};
   const sendMessage=async()=>{
     const content=message.trim();if(!content)return;
     const channelId=channelIds[activeChannel];
