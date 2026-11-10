@@ -1007,3 +1007,24 @@ body{background:var(--nx-bg);color:#f2f3f5}
 .composer-context{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;margin:0 0 6px;border:1px solid #41434b;background:#2b2d31;border-radius:8px;color:#c5c8ce;font-size:10px}
 .composer-context button{border:0;background:transparent;color:#b7baff;font-size:10px;padding:3px 6px}
 @media(max-width:760px){.message-actions{opacity:1;gap:4px}.message-actions button{min-height:30px;padding:5px 8px;font-size:10px}.message-pinned{margin-left:-5px;margin-right:-5px}}
+
+
+/* Workspace role manager */
+.role-member-row{align-items:flex-start;flex-wrap:wrap;gap:10px}
+.role-member-main{min-width:120px;flex:1;display:flex;flex-direction:column;gap:5px}
+.role-member-main small{display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+.role-chip{display:inline-flex;padding:3px 7px;border-radius:999px;background:#404249;color:#d9dcff;font-size:10px}
+.role-assignment{display:flex;flex-wrap:wrap;gap:7px;width:100%;padding:7px 0 0 48px}
+.role-assignment label,.role-permission-grid label{display:inline-flex;align-items:center;gap:6px;color:#c7cbd1;font-size:11px}
+.role-assignment input,.role-permission-grid input{accent-color:#5865f2}
+.role-assignment i,.role-color-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.role-create-form{display:grid;grid-template-columns:minmax(0,1fr) 48px auto;gap:8px;margin-top:12px}
+.role-create-form input[type=text],.role-create-form input:not([type]){min-width:0;background:#1e1f22;border:1px solid #45474e;border-radius:8px;padding:10px;color:#f2f3f5}
+.role-create-form input[type=color]{width:48px;height:38px;padding:3px;border:1px solid #45474e;background:#1e1f22;border-radius:8px}
+.role-create-form button{white-space:nowrap}
+.role-permission-grid{display:flex;flex-wrap:wrap;gap:12px;margin:13px 0;padding:12px;background:#25262a;border-radius:9px}
+.workspace-role-list{display:flex;flex-direction:column;gap:7px}
+.workspace-role-list>div{display:flex;align-items:center;gap:9px;padding:10px;background:#303238;border:1px solid #41434a;border-radius:8px}
+.workspace-role-list small{margin-left:auto;color:#aeb3bb;font-size:10px}
+.workspace-role-list button{font-size:10px;padding:6px 9px}
+@media(max-width:520px){.role-create-form{grid-template-columns:minmax(0,1fr) 42px}.role-create-form button{grid-column:1/-1;width:100%}.role-assignment{padding-left:0}.role-permission-grid{gap:9px}}
