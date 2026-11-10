@@ -218,6 +218,23 @@ function WorkspaceApp() {
     const field=kind==='avatar'?'avatar_url':kind==='banner'?'banner_url':'theme_background_url';
     setProfile(v=>({...v,[field]:data.publicUrl}));notify('이미지를 적용했습니다. 프로필 저장을 눌러 반영하세요.');
   };
+  const enablePushNotifications=async()=>{
+    if(!supabase){notify('서버 연결이 필요합니다.');return;}
+    const publicKey=(import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string|undefined;
+    if(!publicKey){notify('푸시 공개키 설정이 필요합니다. 아직 백그라운드 푸시는 활성화되지 않았습니다.');return;}
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){notify('이 브라우저는 웹 푸시를 지원하지 않습니다.');return;}
+    const permission=await Notification.requestPermission();if(permission!=='granted'){notify('시스템 알림 권한을 허용해 주세요.');return;}
+    try{
+      const registration=await navigator.serviceWorker.ready;
+      const decode=(value:string)=>{const pad='='.repeat((4-value.length%4)%4);const raw=atob((value+pad).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,c=>c.charCodeAt(0));};
+      const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(publicKey)});
+      const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('로그인이 필요합니다.');
+      const payload=subscription.toJSON();
+      const {error}=await supabase.from('push_subscriptions').upsert({user_id:user.id,endpoint:subscription.endpoint,subscription:payload},{onConflict:'endpoint'});
+      if(error)throw error;
+      notify('이 기기의 시스템 푸시 알림을 등록했습니다.');
+    }catch(e:any){notify('푸시 등록 실패: '+(e?.message||'오류'));}
+  };
   const sendPing=async()=>{
     if(!supabase||!currentUser||!activeDm?.person?.id)return;
     const recipient=activeDm.person.id;
@@ -649,6 +666,7 @@ function WorkspaceApp() {
           {profile.theme_background_url&&<button className="secondary-action full-action" onClick={()=>setProfile(v=>({...v,theme_background_url:''}))}>배경 사진 제거</button>}
           <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 및 테마 저장'}</button>
           <button className="secondary-action full-action" onClick={async()=>{if(!('Notification' in window)){notify('이 브라우저는 알림을 지원하지 않습니다.');return;}const p=await Notification.requestPermission();notify(p==='granted'?'브라우저 알림이 허용되었습니다.':'알림 권한이 허용되지 않았습니다.')}}><Bell size={14}/> 브라우저 알림 허용</button>
+          <button className="secondary-action full-action" onClick={enablePushNotifications}><Bell size={14}/> 백그라운드 시스템 푸시 등록</button>
           <div className="settings-note">앱이 열려 있을 때 실시간 알림을 받을 수 있습니다. 앱을 닫은 뒤 푸시 알림을 보내려면 푸시 서버 키 설정이 추가로 필요합니다.</div>
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
