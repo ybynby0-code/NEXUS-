@@ -250,7 +250,7 @@ function WorkspaceApp() {
       const n=payload.new;setNotifications(v=>[n,...v]);
       if(n.type==='ping'&&'vibrate' in navigator)navigator.vibrate([260,100,260,100,420]);
       if('Notification' in window&&Notification.permission==='granted'){
-        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:n.id,icon:'./icons/nexus.svg',vibrate:n.type==='ping'?[260,100,260,100,420]:[180],data:{url:'./?section=dms'}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
+        navigator.serviceWorker?.ready.then(reg=>reg.showNotification(n.title,{body:n.body,tag:n.id,icon:'./icons/nexus.svg',data:{url:'./?section=dms'}})).catch(()=>new Notification(n.title,{body:n.body,tag:n.id}));
       }else notify(n.title+': '+n.body);
     }).subscribe();
     return()=>{supabase?.removeChannel(sub);};
