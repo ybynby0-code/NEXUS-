@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-type Props = { supabase: SupabaseClient | null; userId: string };
+type Props = { supabase: SupabaseClient | null; userId: string; initialCreateCode?: string; initialJoinCode?: string; onInitialCreateHandled?: () => void; onInitialJoinHandled?: () => void };
 type Signal = { kind: 'ready'|'offer'|'answer'|'ice'|'leave'; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 
-export default function CallRoom({supabase,userId}:Props) {
+export default function CallRoom({supabase,userId,initialCreateCode,initialJoinCode,onInitialCreateHandled,onInitialJoinHandled}:Props) {
   const [roomCode,setRoomCode]=useState('');
   const [joinCode,setJoinCode]=useState('');
+  const [incomingCallCode,setIncomingCallCode]=useState(initialJoinCode||'');
   const [createCodeDraft,setCreateCodeDraft]=useState('');
   const [status,setStatus]=useState('회의방을 만들거나 초대 코드를 입력하세요.');
   const [active,setActive]=useState(false);
@@ -97,6 +98,9 @@ export default function CallRoom({supabase,userId}:Props) {
       activeRef.current=false;setActive(false);
     }
   };
+  useEffect(()=>{if(initialCreateCode&&!activeRef.current){void connect(initialCreateCode,true);onInitialCreateHandled?.();}},[initialCreateCode]);
+  useEffect(()=>{if(initialJoinCode)setIncomingCallCode(initialJoinCode);},[initialJoinCode]);
+  const acceptIncomingCall=()=>{const code=incomingCallCode;setIncomingCallCode('');onInitialJoinHandled?.();if(code)void connect(code,false);};
   const createRoom=()=>{const custom=createCodeDraft.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(custom&&custom.length<12){setError('예약 코드는 12자 이상이어야 합니다.');return;}void connect(custom||crypto.randomUUID().replace(/-/g,'').slice(0,16).toUpperCase(),true);};
   const joinRoom=()=>{const code=joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(code.length<12){setError('초대 코드를 확인해 주세요.');return;}void connect(code,false);};
   const leave=async()=>{
@@ -115,13 +119,13 @@ export default function CallRoom({supabase,userId}:Props) {
   return <div className="call-room">
     <div className="call-room-status"><span className={active?'call-live-dot':''}/>{status}</div>
     {error&&<div className="call-error">{error}</div>}
-    {!active?<div className="call-entry">
+    {!active?<>{incomingCallCode&&<div className="incoming-call-card"><div><strong>수신 통화</strong><span>초대 코드: {incomingCallCode}</span><small>상대방이 통화를 요청했습니다.</small></div><button className="primary-action" onClick={acceptIncomingCall}><Phone size={15}/> 받기</button><button className="secondary-action" onClick={()=>{setIncomingCallCode('');onInitialJoinHandled?.();}}>거절</button></div>}<div className="call-entry">
       <div className="call-entry-card"><Video size={24}/><h3>새 1:1 화상 회의</h3><p>예약 코드를 입력하거나 새 회의방 코드를 자동 생성하세요.</p><input value={createCodeDraft} onChange={e=>setCreateCodeDraft(e.target.value.toUpperCase())} maxLength={16} placeholder="예약 코드 입력 (선택)"/><button className="primary-action" onClick={createRoom} disabled={!supabase}><Phone size={15}/> 회의방 만들기</button></div>
       <div className="call-entry-card"><Phone size={24}/><h3>초대 코드로 참여</h3><p>상대방에게 받은 회의 코드를 입력하세요.</p><input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} maxLength={16} placeholder="16자리 초대 코드"/><button className="secondary-action" onClick={joinRoom} disabled={!supabase}>참여하기</button></div>
     </div>:<>
       <div className="call-code"><span>초대 코드 <strong>{roomCode}</strong></span><button className="secondary-action" onClick={copyCode}><Copy size={14}/> 코드 복사</button></div>
       <div className="call-videos"><div className="call-video-card"><video ref={localVideo} autoPlay playsInline muted/><span>내 화면</span></div><div className="call-video-card remote">{remoteReady?<video ref={remoteVideo} autoPlay playsInline/>:<div className="call-waiting">상대방 연결 대기 중</div>}<span>상대방</span></div></div>
       <div className="call-controls"><button className={muted?'off':''} onClick={toggleMic}>{muted?<MicOff size={18}/>:<Mic size={18}/>}<span>{muted?'마이크 켜기':'마이크 끄기'}</span></button><button className={cameraOff?'off':''} onClick={toggleCamera}>{cameraOff?<VideoOff size={18}/>:<Video size={18}/>}<span>{cameraOff?'카메라 켜기':'카메라 끄기'}</span></button><button className="hangup" onClick={leave}><PhoneOff size={18}/><span>통화 종료</span></button></div>
-    </>}
+    </>}</>
   </div>;
 }
