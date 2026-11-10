@@ -17,6 +17,7 @@ export default function CallRoom({supabase,userId}:Props) {
   const [error,setError]=useState('');
   const localVideo=useRef<HTMLVideoElement>(null);
   const remoteVideo=useRef<HTMLVideoElement>(null);
+  const remoteStreamRef=useRef<MediaStream|null>(null);
   const pcRef=useRef<RTCPeerConnection|null>(null);
   const channelRef=useRef<any>(null);
   const streamRef=useRef<MediaStream|null>(null);
@@ -24,6 +25,7 @@ export default function CallRoom({supabase,userId}:Props) {
   const activeRef=useRef(false);
 
   useEffect(()=>{if(localVideo.current&&streamRef.current)localVideo.current.srcObject=streamRef.current;},[active]);
+  useEffect(()=>{if(remoteReady&&remoteVideo.current&&remoteStreamRef.current)remoteVideo.current.srcObject=remoteStreamRef.current;},[remoteReady]);
   const sendSignal=async(payload:Signal)=>{
     if(channelRef.current)await channelRef.current.send({type:'broadcast',event:'signal',payload:{...payload,from:userId}});
   };
@@ -42,7 +44,7 @@ export default function CallRoom({supabase,userId}:Props) {
       const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
       pcRef.current=pc;
       stream.getTracks().forEach(track=>pc.addTrack(track,stream));
-      pc.ontrack=(event)=>{if(remoteVideo.current)remoteVideo.current.srcObject=event.streams[0];setRemoteReady(true);setStatus('상대방과 연결되었습니다.');};
+      pc.ontrack=(event)=>{remoteStreamRef.current=event.streams[0];if(remoteVideo.current)remoteVideo.current.srcObject=event.streams[0];setRemoteReady(true);setStatus('상대방과 연결되었습니다.');};
       pc.onicecandidate=(event)=>{if(event.candidate)void sendSignal({kind:'ice',candidate:event.candidate.toJSON()});};
       pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed')setStatus('연결 실패: TURN 서버가 필요한 네트워크일 수 있습니다.');if(pc.connectionState==='disconnected')setStatus('상대방 연결이 끊어졌습니다.');};
       const channel=supabase.channel('nexus-call-'+code,{config:{broadcast:{self:false}}});
@@ -89,7 +91,7 @@ export default function CallRoom({supabase,userId}:Props) {
     pcRef.current?.close();pcRef.current=null;
     if(channelRef.current&&supabase){await supabase.removeChannel(channelRef.current);channelRef.current=null;}
     if(localVideo.current)localVideo.current.srcObject=null;if(remoteVideo.current)remoteVideo.current.srcObject=null;
-    setActive(false);setRemoteReady(false);setStatus('통화가 종료되었습니다.');setMuted(false);setCameraOff(false);
+    remoteStreamRef.current=null;setActive(false);setRemoteReady(false);setStatus('통화가 종료되었습니다.');setMuted(false);setCameraOff(false);
   };
   const toggleMic=()=>{const next=!muted;streamRef.current?.getAudioTracks().forEach(t=>t.enabled=!next);setMuted(next);};
   const toggleCamera=()=>{const next=!cameraOff;streamRef.current?.getVideoTracks().forEach(t=>t.enabled=!next);setCameraOff(next);};
