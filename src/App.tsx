@@ -370,6 +370,8 @@ function WorkspaceApp() {
       const {data:rows,error:channelError}=await supabase.from('channels').select('id,name').eq('workspace_id',data.workspace_id).order('created_at');
       if(channelError){notify('참여했지만 채널을 불러오지 못했습니다: '+channelError.message);return;}
       const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
+      const {data:allWorkspaces}=await supabase.from('workspaces').select('id,name,owner_id').order('created_at');
+      setWorkspaces(allWorkspaces||[]);
       setWorkspaceId(data.workspace_id);
       setChannelIds(map);
       setChannels((rows||[]).map((c:any)=>c.name));
