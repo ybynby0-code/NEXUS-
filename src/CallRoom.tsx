@@ -39,10 +39,23 @@ export default function CallRoom({supabase,userId}:Props) {
     setError('');
     try{
       if(!navigator.mediaDevices?.getUserMedia)throw new Error('이 브라우저에서 카메라·마이크 접근을 지원하지 않습니다. 권한과 HTTPS 연결을 확인하세요.');
-      const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});
+      let stream:MediaStream;
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:true,video:true});
+        setCameraOff(false);
+      }catch(videoError){
+        try{stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});setCameraOff(true);setStatus('카메라를 사용할 수 없어 음성 통화로 연결합니다.');}
+        catch{throw videoError;}
+      }
       streamRef.current=stream;
       if(localVideo.current)localVideo.current.srcObject=stream;
-      const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]});
+      const env=(import.meta as any).env||{};
+      const iceServers:RTCIceServer[]=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
+      const turnUrls=String(env.VITE_TURN_URLS||env.VITE_TURN_URL||'').split(',').map((v:string)=>v.trim()).filter(Boolean);
+      if(turnUrls.length&&env.VITE_TURN_USERNAME&&env.VITE_TURN_CREDENTIAL){
+        iceServers.push({urls:turnUrls,username:env.VITE_TURN_USERNAME,credential:env.VITE_TURN_CREDENTIAL});
+      }
+      const pc=new RTCPeerConnection({iceServers});
       pcRef.current=pc;
       stream.getTracks().forEach(track=>pc.addTrack(track,stream));
       pc.ontrack=(event)=>{remoteStreamRef.current=event.streams[0];if(remoteVideo.current)remoteVideo.current.srcObject=event.streams[0];setRemoteReady(true);setStatus('상대방과 연결되었습니다.');};
