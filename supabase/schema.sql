@@ -480,3 +480,125 @@ create index if not exists workspace_files_uploaded_by_idx on public.workspace_f
 create index if not exists workspace_invites_accepted_by_idx on public.workspace_invites(accepted_by);
 create index if not exists workspace_invites_invited_by_idx on public.workspace_invites(invited_by);
 create index if not exists workspaces_owner_id_idx on public.workspaces(owner_id);
+
+
+-- NEXUS reliability/security follow-up (notification delivery and role escalation guard).
+alter table public.notifications add column if not exists source_id uuid;
+alter table public.notifications drop constraint if exists notifications_type_check;
+alter table public.notifications add constraint notifications_type_check
+  check (type = any (array['friend_request','dm','mention','ping','call','admin']::text[]));
+
+drop policy if exists notifications_insert_actor on public.notifications;
+create policy notifications_insert_actor
+on public.notifications for insert to authenticated
+with check (
+  actor_id = (select auth.uid())
+  and recipient_id <> (select auth.uid())
+  and (
+    (type in ('dm','ping','call') and exists (
+      select 1 from public.dm_conversations c
+      where c.id = notifications.target_id
+        and (c.member_one = (select auth.uid()) or c.member_two = (select auth.uid()))
+        and (c.member_one = notifications.recipient_id or c.member_two = notifications.recipient_id)
+    ))
+    or (type = 'mention' and exists (
+      select 1 from public.messages m
+      join public.channels c on c.id = m.channel_id
+      join public.workspace_members sender_member
+        on sender_member.workspace_id = c.workspace_id and sender_member.user_id = (select auth.uid())
+      join public.workspace_members recipient_member
+        on recipient_member.workspace_id = c.workspace_id and recipient_member.user_id = notifications.recipient_id
+      join public.profiles p on p.id = notifications.recipient_id
+      where m.id = notifications.source_id
+        and m.channel_id = notifications.target_id
+        and m.author_id = (select auth.uid())
+        and position(lower('@' || p.display_name) in lower(m.content)) > 0
+    ))
+    or (type = 'friend_request' and exists (
+      select 1 from public.friend_requests fr
+      where fr.id = notifications.source_id
+        and fr.sender_id = (select auth.uid())
+        and fr.recipient_id = notifications.recipient_id
+        and fr.status = 'pending'
+    ))
+  )
+);
+
+create or replace function private.can_define_workspace_role(p_workspace_id uuid,p_permissions jsonb)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select private.is_workspace_admin(p_workspace_id)
+    or (
+      (select auth.uid()) is not null
+      and jsonb_typeof(coalesce(p_permissions, '{}'::jsonb)) = 'object'
+      and not exists (
+        select 1 from jsonb_each_text(coalesce(p_permissions, '{}'::jsonb)) requested
+        where requested.value = 'true'
+          and not exists (
+            select 1 from public.workspace_member_roles mr
+            join public.workspace_roles r on r.id=mr.role_id and r.workspace_id=mr.workspace_id
+            where mr.workspace_id=p_workspace_id and mr.user_id=(select auth.uid())
+              and coalesce((r.permissions->>requested.key)::boolean,false)
+          )
+      )
+    );
+$$;
+revoke all on function private.can_define_workspace_role(uuid,jsonb) from public,anon;
+grant execute on function private.can_define_workspace_role(uuid,jsonb) to authenticated;
+
+create or replace function private.can_assign_workspace_role(p_workspace_id uuid,p_user_id uuid,p_role_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.workspace_roles r
+    join public.workspace_members target_member
+      on target_member.workspace_id=r.workspace_id and target_member.user_id=p_user_id
+    where r.id=p_role_id and r.workspace_id=p_workspace_id
+      and private.can_define_workspace_role(p_workspace_id,r.permissions)
+  );
+$$;
+revoke all on function private.can_assign_workspace_role(uuid,uuid,uuid) from public,anon;
+grant execute on function private.can_assign_workspace_role(uuid,uuid,uuid) to authenticated;
+
+drop policy if exists workspace_roles_insert_admin on public.workspace_roles;
+drop policy if exists workspace_roles_update_admin on public.workspace_roles;
+drop policy if exists workspace_roles_delete_admin on public.workspace_roles;
+create policy workspace_roles_insert_admin on public.workspace_roles for insert to authenticated
+with check (private.has_workspace_permission(workspace_id,'manage_roles')
+  and created_by=(select auth.uid()) and private.can_define_workspace_role(workspace_id,permissions));
+create policy workspace_roles_update_admin on public.workspace_roles for update to authenticated
+using (private.has_workspace_permission(workspace_id,'manage_roles'))
+with check (private.has_workspace_permission(workspace_id,'manage_roles')
+  and private.can_define_workspace_role(workspace_id,permissions));
+create policy workspace_roles_delete_admin on public.workspace_roles for delete to authenticated
+using (private.has_workspace_permission(workspace_id,'manage_roles'));
+
+drop policy if exists workspace_member_roles_insert_admin on public.workspace_member_roles;
+drop policy if exists workspace_member_roles_update_admin on public.workspace_member_roles;
+drop policy if exists workspace_member_roles_delete_admin on public.workspace_member_roles;
+create policy workspace_member_roles_insert_admin on public.workspace_member_roles for insert to authenticated
+with check (assigned_by=(select auth.uid())
+  and private.has_workspace_permission(workspace_id,'manage_roles')
+  and private.can_assign_workspace_role(workspace_id,user_id,role_id));
+create policy workspace_member_roles_update_admin on public.workspace_member_roles for update to authenticated
+using (private.has_workspace_permission(workspace_id,'manage_roles'))
+with check (assigned_by=(select auth.uid())
+  and private.has_workspace_permission(workspace_id,'manage_roles')
+  and private.can_assign_workspace_role(workspace_id,user_id,role_id));
+create policy workspace_member_roles_delete_admin on public.workspace_member_roles for delete to authenticated
+using (private.has_workspace_permission(workspace_id,'manage_roles'));
+
+create index if not exists message_reactions_user_id_idx on public.message_reactions(user_id);
+create index if not exists workspace_join_links_created_by_idx on public.workspace_join_links(created_by);
+create index if not exists workspace_member_roles_user_id_idx on public.workspace_member_roles(user_id);
+create index if not exists workspace_member_roles_role_id_idx on public.workspace_member_roles(role_id);
+create index if not exists workspace_member_roles_assigned_by_idx on public.workspace_member_roles(assigned_by);
+create index if not exists workspace_roles_created_by_idx on public.workspace_roles(created_by);
+
+drop policy if exists message_reactions_insert_self_member on public.message_reactions;
+create policy message_reactions_insert_self_member on public.message_reactions for insert to authenticated
+with check (user_id=(select auth.uid()) and exists (
+  select 1 from public.messages m join public.channels c on c.id=m.channel_id
+  where m.id=message_reactions.message_id and private.is_workspace_member(c.workspace_id)
+));
+drop policy if exists message_reactions_delete_self on public.message_reactions;
+create policy message_reactions_delete_self on public.message_reactions for delete to authenticated
+using (user_id=(select auth.uid()));
