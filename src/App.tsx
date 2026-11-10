@@ -369,7 +369,7 @@ function WorkspaceApp() {
       if('Notification' in window&&Notification.permission==='granted'){
         navigator.serviceWorker?.ready.then(async reg=>{
           const subscription=await reg.pushManager.getSubscription().catch(()=>null);
-          if(!subscription)await reg.showNotification(n.title,{body:n.body,tag:'nexus-notification-'+(n.target_id||n.id),icon:'./icons/nexus.svg',data:{url:targetUrl},vibrate:[260,100,260,100,420]});
+          if(!subscription)await reg.showNotification(n.title,{body:n.body,tag:'nexus-notification-'+(n.target_id||n.id),icon:'./icons/nexus.svg',data:{url:targetUrl},vibrate:[260,100,260,100,420]} as NotificationOptions & {vibrate:number[]});
         }).catch(error=>console.warn('[NEXUS foreground notification]',error));
       }else notify(n.title+': '+n.body);
     }).subscribe();
