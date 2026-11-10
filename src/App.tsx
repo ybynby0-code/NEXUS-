@@ -533,7 +533,7 @@ function WorkspaceApp() {
     setFiles(v=>v.filter(x=>x.id!==file.id));notify('파일을 삭제했습니다.');
   };
 
-  return <div className="app-shell">
+  return <div className={'app-shell theme-'+profile.theme_mode} style={{'--user-accent':profile.theme_color,backgroundImage:profile.theme_background_url?'linear-gradient(90deg,#0b1020ed,#0b1020d9),url("'+profile.theme_background_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'} as any}>
     <aside className={`sidebar ${mobilePanel==='nav'?'mobile-open':''}`}>
 
       <button className="workspace-switch" onClick={()=>setWorkspaceMenuOpen(v=>!v)} aria-expanded={workspaceMenuOpen}><div className="workspace-icon">N<span>•</span></div><div><strong>{workspaces.find(w=>w.id===workspaceId)?.name||'NEXUS'}</strong><small>팀 작업 공간</small></div><ChevronDown size={16}/></button>{workspaceMenuOpen&&<div className="workspace-menu">{workspaces.map(w=><button key={w.id} className={w.id===workspaceId?'active':''} onClick={()=>switchWorkspace(w.id)}>{w.name}{w.id===workspaceId&&<Check size={14}/>}</button>)}<div className="workspace-create"><input value={workspaceDraft} onChange={e=>setWorkspaceDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createWorkspace()} placeholder="새 워크스페이스 이름" maxLength={80}/><button onClick={createWorkspace} disabled={workspaceBusy}><Plus size={14}/></button></div></div>}
