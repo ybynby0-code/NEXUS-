@@ -77,6 +77,8 @@ function WorkspaceApp() {
   const joinTokenHandled=useRef(false);
   const [files,setFiles] = useState<any[]>([]);
   const [filesBusy,setFilesBusy] = useState(false);
+  const [filePreview,setFilePreview] = useState<any>(null);
+  const [filePreviewBusy,setFilePreviewBusy] = useState(false);
   const [attachDialogOpen,setAttachDialogOpen] = useState(false);
   const [attachableFiles,setAttachableFiles] = useState<any[]>([]);
   const [attachBusy,setAttachBusy] = useState(false);
@@ -800,6 +802,16 @@ function WorkspaceApp() {
     if(error||!data?.signedUrl){notify('파일 다운로드 링크 생성 실패: '+(error?.message||'오류'));return;}
     window.open(data.signedUrl,'_blank','noopener,noreferrer');
   };
+  const previewWorkspaceFile=async(file:any)=>{
+    if(!supabase||filePreviewBusy)return;
+    const supported=/^(image\\/|video\\/|audio\\/|application\\/pdf$)/i.test(String(file.mime_type||''));
+    if(!supported){notify('미리보기를 지원하지 않는 파일 형식입니다.');return;}
+    setFilePreviewBusy(true);
+    const {data,error}=await supabase.storage.from('nexus-files').createSignedUrl(file.storage_path,300);
+    setFilePreviewBusy(false);
+    if(error||!data?.signedUrl){notify('파일 미리보기 링크 생성 실패: '+(error?.message||'오류'));return;}
+    setFilePreview({name:file.file_name,mime:file.mime_type,url:data.signedUrl});
+  };
   const deleteWorkspaceFile=async(file:any)=>{
     if(!supabase||!window.confirm(file.file_name+' 파일을 삭제하시겠습니까?'))return;
     const removed=await supabase.storage.from('nexus-files').remove([file.storage_path]);
@@ -943,7 +955,7 @@ function WorkspaceApp() {
         <div className="feature-heading"><div><div className="eyebrow">FILES & DOCUMENTS</div><h1>파일 및 문서</h1><p>워크스페이스 멤버와 파일을 공유합니다. 파일은 비공개 저장소에 보관됩니다.</p></div><button className="primary-action" disabled={filesBusy||!dbReady} onClick={()=>fileInput.current?.click()}><Upload size={16}/> {filesBusy?'업로드 중...':'파일 업로드'}</button></div>
         <input ref={fileInput} type="file" multiple hidden onChange={e=>addFiles(e.target.files)}/>
         <div className="upload-zone" onClick={()=>!filesBusy&&fileInput.current?.click()}><FolderOpen size={30}/><strong>{filesBusy?'파일을 업로드하고 있습니다':'파일을 선택하거나 여기를 누르세요'}</strong><span>최대 파일 크기 25MB · 로그인한 워크스페이스 멤버만 접근할 수 있습니다.</span></div>
-        <div className="section-card"><div className="card-title"><FileText size={18}/>공유 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">공유된 파일이 없습니다.</div>:files.map(file=><div className="file-row" key={file.id}><div className="file-type"><FileText size={17}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB · {new Date(file.created_at).toLocaleString('ko-KR')}</small></div><button className="secondary-action" onClick={()=>downloadWorkspaceFile(file)}>다운로드</button>{file.uploaded_by===currentUser?.id&&<button className="secondary-action" onClick={()=>deleteWorkspaceFile(file)}>삭제</button>}</div>)}</div>
+        <div className="section-card"><div className="card-title"><FileText size={18}/>공유 파일 <span>{files.length}개</span></div>{files.length===0?<div className="empty-state">공유된 파일이 없습니다.</div>:files.map(file=><div className="file-row" key={file.id}><div className="file-type"><FileText size={17}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB · {new Date(file.created_at).toLocaleString('ko-KR')}</small></div>{/^(image\\/|video\\/|audio\\/|application\\/pdf$)/i.test(String(file.mime_type||''))&&<button className="secondary-action" disabled={filePreviewBusy} onClick={()=>previewWorkspaceFile(file)}>미리보기</button>}<button className="secondary-action" onClick={()=>downloadWorkspaceFile(file)}>다운로드</button>{file.uploaded_by===currentUser?.id&&<button className="secondary-action" onClick={()=>deleteWorkspaceFile(file)}>삭제</button>}</div>)}</div>
       </section>}
       <footer className="status-footer"><span><i/>{serverApiReady?"시스템 연결됨":dbReady?"데이터베이스 연결됨":"연결 확인 중"}</span><span>SUPABASE · SEOUL</span><button onClick={()=>setMobilePanel('ai')}><Sparkles size={14}/> AI 패널 열기</button></footer>
     </main>
@@ -969,6 +981,7 @@ function WorkspaceApp() {
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='call'){const code=(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1];if(code)setIncomingCallCode(code.toUpperCase());setSection('meetings');}else if(n.type==='ping'||n.type==='dm'){const conversation=dmConversations.find(c=>c.id===n.target_id);if(conversation)setActiveDm(conversation);setSection('dms');}if(n.type==='friend_request')setSection('community');if(n.type==='mention'){const name=Object.keys(channelIds).find(k=>channelIds[k]===n.target_id);if(name)setActiveChannel(name);setSection('messages');}setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
+    {filePreview&&<div className="modal-backdrop file-preview-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFilePreview(null)}}><div className="file-preview-modal"><div className="file-preview-heading"><strong>{filePreview.name}</strong><button className="icon-button" onClick={()=>setFilePreview(null)} aria-label="미리보기 닫기"><X size={18}/></button></div><div className="file-preview-content">{String(filePreview.mime).startsWith('image/')?<img src={filePreview.url} alt={filePreview.name}/>:String(filePreview.mime).startsWith('video/')?<video src={filePreview.url} controls playsInline/>:String(filePreview.mime).startsWith('audio/')?<audio src={filePreview.url} controls/>:<iframe title={filePreview.name} src={filePreview.url}/>}</div><div className="file-preview-footer"><button className="secondary-action" onClick={()=>{window.open(filePreview.url,'_blank','noopener,noreferrer')}}>새 창에서 열기</button><button className="primary-action" onClick={()=>setFilePreview(null)}>닫기</button></div></div></div>}
     {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><p>영문, 숫자, 한글, 하이픈을 사용할 수 있습니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
