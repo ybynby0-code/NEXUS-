@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-type Props = { supabase: SupabaseClient | null; userId: string; initialCreateCode?: string; initialJoinCode?: string; onInitialCreateHandled?: () => void; onInitialJoinHandled?: () => void };
+type Props = { supabase: SupabaseClient | null; userId: string; initialCreateCode?: string; initialJoinCode?: string; onInitialCreateHandled?: () => void; onInitialJoinHandled?: () => void; onOutgoingReady?: () => void };
 type Signal = { kind: 'ready'|'offer'|'answer'|'ice'|'leave'; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 
-export default function CallRoom({supabase,userId,initialCreateCode,initialJoinCode,onInitialCreateHandled,onInitialJoinHandled}:Props) {
+export default function CallRoom({supabase,userId,initialCreateCode,initialJoinCode,onInitialCreateHandled,onInitialJoinHandled,onOutgoingReady}:Props) {
   const [roomCode,setRoomCode]=useState('');
   const [joinCode,setJoinCode]=useState('');
   const [incomingCallCode,setIncomingCallCode]=useState(initialJoinCode||'');
@@ -88,7 +88,8 @@ export default function CallRoom({supabase,userId,initialCreateCode,initialJoinC
       });
       if(!joined)throw new Error('통화 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.');
       activeRef.current=true;setActive(true);setIsCaller(caller);setRoomCode(code);setRemoteReady(false);
-      setStatus(caller?'회의방을 만들었습니다. 초대 코드를 상대방에게 보내세요.':'회의방에 참여했습니다. 상대방이 연결을 시작할 때까지 기다리세요.');
+      setStatus(caller?'회의방을 만들었습니다. 상대방의 응답을 기다립니다.':'회의방에 참여했습니다. 상대방이 연결을 시작할 때까지 기다리세요.');
+      if(caller)onOutgoingReady?.();
       if(!caller)await sendSignal({kind:'ready'});
     }catch(e:any){
       setError(e?.message||'통화를 시작하지 못했습니다.');
