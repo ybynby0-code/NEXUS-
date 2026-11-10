@@ -193,7 +193,6 @@ function WorkspaceApp() {
     const token=new URLSearchParams(window.location.search).get('join');
     if(!token)return;
     joinTokenHandled.current=true;
-    let alive=true;
     (async()=>{
       try{
         const {data,error}=await supabase.functions.invoke('workspace-join-link',{body:{action:'accept',token}});
@@ -203,7 +202,6 @@ function WorkspaceApp() {
           supabase.from('workspaces').select('id,name,owner_id').order('created_at')
         ]);
         if(channelError)throw channelError;if(workspaceError)throw workspaceError;
-        if(!alive)return;
         const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
         setWorkspaces(allWorkspaces||[]);setWorkspaceId(data.workspace_id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));
         if(rows?.[0])setActiveChannel(rows[0].name);
@@ -212,7 +210,6 @@ function WorkspaceApp() {
         notify(data.workspace_name+' 서버에 참여했습니다. 채널 목록을 불러왔습니다.');
       }catch(e:any){joinTokenHandled.current=false;notify('서버 초대 링크 오류: '+(e?.message||'다시 시도해 주세요.'));}
     })();
-    return()=>{alive=false};
   },[supabase,dbReady,currentUser?.id]);
 
   const loadDmConversations=async()=>{
