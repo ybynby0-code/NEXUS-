@@ -32,6 +32,10 @@ Deno.serve(async (req: Request) => {
     });
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) return json({ ok: false, error: "로그인 세션을 확인할 수 없습니다." }, 401);
+    const body = await req.json();
+    const prompt = String(body?.prompt || "").trim();
+    if (!prompt) return json({ ok: false, error: "질문을 입력해 주세요." }, 400);
+    if (prompt.length > 8000) return json({ ok: false, error: "질문은 8,000자 이하로 입력해 주세요." }, 413);
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!serviceRoleKey) return json({ ok: false, error: "AI 사용량 보호 설정이 없습니다." }, 503);
     const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -42,11 +46,6 @@ Deno.serve(async (req: Request) => {
     }
     const quota = Array.isArray(quotaData) ? quotaData[0] : quotaData;
     if (!quota?.allowed) return json({ ok: false, code: "AI_DAILY_LIMIT", error: "오늘의 AI 사용 한도(60회)를 모두 사용했습니다. 다음 날 다시 이용해 주세요.", reset_at: quota?.reset_at }, 429);
-
-    const body = await req.json();
-    const prompt = String(body?.prompt || "").trim();
-    if (!prompt) return json({ ok: false, error: "질문을 입력해 주세요." }, 400);
-    if (prompt.length > 8000) return json({ ok: false, error: "질문은 8,000자 이하로 입력해 주세요." }, 413);
     const contextRows = Array.isArray(body?.context) ? body.context.slice(-12).map((item: any) => ({
       author: String(item?.author || "사용자").slice(0, 60),
       content: String(item?.content || "").slice(0, 900),
