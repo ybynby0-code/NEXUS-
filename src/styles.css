@@ -1456,3 +1456,26 @@ body::before{
 .permission-footer button{min-width:88px}
 .channel-permission-modal>.settings-note{margin:8px 0 0;font-size:10px;line-height:1.5}
 @media(max-width:600px){.channel-permission-modal{width:calc(100vw - 18px);max-height:88dvh;padding:15px}.channel-permission-list{max-height:42dvh}.channel-permission-item{gap:8px}.channel-permission-item select{flex-basis:94px}.channel-privacy-row{align-items:flex-start}}
+
+
+/* Group DM management */
+.group-dm-manage-modal{width:min(590px,calc(100vw - 24px));max-height:88dvh;overflow:auto}
+.group-dm-manage-modal>label{display:block;font-size:11px;font-weight:700;color:#dfe7f5;margin:13px 0 6px}
+.group-dm-rename-row{display:flex;gap:8px;margin-bottom:18px}
+.group-dm-rename-row input{flex:1;min-width:0;border:1px solid #344057;border-radius:8px;background:#0d1524;color:#e8ecf5;padding:10px;font-size:12px;outline:none}
+.group-dm-member-list{max-height:220px;overflow:auto;margin:4px 0 14px}
+.group-dm-member-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid #263148}
+.group-dm-member-row>div:nth-child(2){display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.group-dm-member-row strong{font-size:11px}
+.group-dm-member-row small{font-size:9px;color:#8793a8}
+.group-owner-badge{font-size:8px;letter-spacing:.7px;color:#c7baff;background:#302955;border-radius:5px;padding:4px 6px}
+.group-remove-button{padding:6px 9px;font-size:9px}
+.group-invite-title{margin-top:14px}
+.group-dm-friend-picker{max-height:155px;overflow:auto;margin-top:7px}
+.group-dm-friend-picker label{display:flex;align-items:center;gap:9px;padding:8px 4px;border-bottom:1px solid #202b40;font-size:11px;color:#c5cede}
+.group-dm-friend-picker input{accent-color:#7667d8;width:16px;height:16px}
+.group-dm-manage-actions{display:flex;justify-content:space-between;gap:9px;margin-top:16px}
+.leave-group-button{color:#ffaaa9;border-color:#714448}
+.dm-chat-head .dm-ping-button{margin-left:auto}
+.dm-chat-head .dm-ping-button+button{margin-left:0}
+@media(max-width:600px){.group-dm-manage-modal{width:calc(100vw - 16px);padding:15px}.group-dm-manage-actions{flex-wrap:wrap}.group-dm-manage-actions button{flex:1}.group-dm-rename-row .primary-action{padding:8px 10px}.dm-chat-head .dm-ping-button{font-size:9px;padding:7px 8px}}
