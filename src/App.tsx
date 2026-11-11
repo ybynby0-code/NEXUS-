@@ -44,6 +44,10 @@ function WorkspaceApp() {
   const [friends,setFriends] = useState<any[]>([]);
   const [friendBusy,setFriendBusy] = useState(false);
   const [dmConversations,setDmConversations] = useState<any[]>([]);
+  const [groupDmOpen,setGroupDmOpen] = useState(false);
+  const [groupDmName,setGroupDmName] = useState('');
+  const [groupDmSelected,setGroupDmSelected] = useState<string[]>([]);
+  const [groupDmBusy,setGroupDmBusy] = useState(false);
   const [activeDm,setActiveDm] = useState<any>(null);
   const [dmMessages,setDmMessages] = useState<any[]>([]);
   const [dmDraft,setDmDraft] = useState('');
@@ -359,12 +363,27 @@ function WorkspaceApp() {
 
   const loadDmConversations=async()=>{
     if(!supabase||!currentUser)return;
-    const {data,error}=await supabase.from('dm_conversations').select('id,member_one,member_two,created_at').or('member_one.eq.'+currentUser.id+',member_two.eq.'+currentUser.id).order('created_at',{ascending:false});
+    const {data:memberships,error}=await supabase.from('dm_conversation_members')
+      .select('conversation_id,user_id,role,dm_conversations(id,member_one,member_two,is_group,name,owner_id,created_at)')
+      .eq('user_id',currentUser.id).order('joined_at',{ascending:false});
     if(error){notify('DM 목록 조회 실패: '+error.message);return;}
-    const rows=data||[];const ids=[...new Set(rows.map((c:any)=>c.member_one===currentUser.id?c.member_two:c.member_one))];
-    const {data:people}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio,banner_url,profile_decoration,theme_color').in('id',ids):{data:[]};
+    const conversations=(memberships||[]).map((row:any)=>row.dm_conversations).filter(Boolean);
+    const ids=[...new Set(conversations.map((c:any)=>c.id))];
+    if(!ids.length){setDmConversations([]);return;}
+    const [{data:participants,error:participantError},{data:people,error:peopleError}]=await Promise.all([
+      supabase.from('dm_conversation_members').select('conversation_id,user_id,role').in('conversation_id',ids),
+      supabase.from('profiles').select('id,display_name,avatar_url,bio,banner_url,profile_decoration,theme_color').in('id',[...new Set((memberships||[]).map((m:any)=>m.user_id))])
+    ]);
+    if(participantError||peopleError){notify('대화 참여자 조회 실패: '+(participantError||peopleError)!.message);return;}
     const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
-    setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
+    const participantMap:Record<string,string[]>={};(participants||[]).forEach((m:any)=>{(participantMap[m.conversation_id]??=[]).push(m.user_id);});
+    setDmConversations(conversations.map((c:any)=>{
+      const memberIds=participantMap[c.id]||[];
+      const otherId=memberIds.find((id:string)=>id!==currentUser.id);
+      const person=otherId?byId[otherId]:null;
+      const groupPeople=memberIds.filter((id:string)=>id!==currentUser.id).map((id:string)=>byId[id]).filter(Boolean);
+      return {...c,members:memberIds,people:groupPeople,person,title:c.is_group?(c.name||groupPeople.map((p:any)=>p.display_name).join(', ')||'그룹 대화'):(person?.display_name||'사용자')};
+    }));
   };
   useEffect(()=>{if(section==='dms'&&currentUser)loadDmConversations();},[section,currentUser?.id]);
   useEffect(()=>{const params=new URLSearchParams(window.location.search);const call=params.get('call');const requested=params.get('section');if(call&&/^[A-Z0-9]{12,16}$/i.test(call)){setIncomingCallCode(call.toUpperCase());setSection('meetings');window.history.replaceState({},'',window.location.pathname);}else if(['home','messages','dms','community','meetings','files'].includes(requested||''))setSection(requested as Section);},[]);
@@ -379,6 +398,30 @@ function WorkspaceApp() {
     if(!data){const result=await supabase.from('dm_conversations').insert({member_one:pair[0],member_two:pair[1]}).select('*').single();if(result.error){notify('친구 수락 후 DM을 시작할 수 있습니다. '+result.error.message);return;}data=result.data;}
     setActiveDm({...data,person});setSection('dms');setMobilePanel('none');loadDmConversations();
   };
+  const createGroupDm=async()=>{
+    if(!supabase||!currentUser||groupDmBusy)return;
+    if(groupDmSelected.length<2){notify('그룹 DM은 친구를 2명 이상 선택해야 합니다.');return;}
+    setGroupDmBusy(true);
+    try{
+      const {data:conversationId,error}=await supabase.rpc('create_group_dm',{p_member_ids:groupDmSelected,p_name:groupDmName.trim()||null});
+      if(error)throw error;
+      const [{data:conversation,error:conversationError},{data:participants,error:participantError}]=await Promise.all([
+        supabase.from('dm_conversations').select('*').eq('id',conversationId).single(),
+        supabase.from('dm_conversation_members').select('user_id,role').eq('conversation_id',conversationId)
+      ]);
+      if(conversationError)throw conversationError;if(participantError)throw participantError;
+      const ids=(participants||[]).map((m:any)=>m.user_id);
+      const {data:people,error:peopleError}=await supabase.from('profiles').select('id,display_name,avatar_url,bio,banner_url,profile_decoration,theme_color').in('id',ids);
+      if(peopleError)throw peopleError;
+      const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
+      const groupPeople=ids.filter((id:string)=>id!==currentUser.id).map((id:string)=>byId[id]).filter(Boolean);
+      const active={...conversation,members:ids,people:groupPeople,person:null,title:conversation.name||groupPeople.map((p:any)=>p.display_name).join(', ')||'그룹 대화'};
+      setActiveDm(active);setDmMessages([]);setSection('dms');setMobilePanel('none');
+      setGroupDmOpen(false);setGroupDmName('');setGroupDmSelected([]);
+      await loadDmConversations();notify('그룹 DM을 만들었습니다.');
+    }catch(e:any){notify('그룹 DM 생성 실패: '+(e?.message||'오류'));}
+    finally{setGroupDmBusy(false);}
+  };
   const sendDm=async()=>{
     const content=dmDraft.trim();if(!content||!supabase||!currentUser||!activeDm)return;
     setDmDraft('');
@@ -387,19 +430,17 @@ function WorkspaceApp() {
     recordUsage('dm_sent');
     if(data){
       setDmMessages(v=>v.some(m=>m.id===data.id)?v:[...v,data]);
-      const recipientId=activeDm.member_one===currentUser.id?activeDm.member_two:activeDm.member_one;
+      const recipientIds=(activeDm.is_group?(activeDm.members||[]):[activeDm.member_one===currentUser.id?activeDm.member_two:activeDm.member_one]).filter((id:string)=>id!==currentUser.id);
       const senderName=profile.display_name||currentUser.name;
       const preview=content.length>180?content.slice(0,177)+'…':content;
       const dmTitle=senderName+'님의 새 메시지';
-      void supabase.from('notifications').insert({recipient_id:recipientId,actor_id:currentUser.id,type:'dm',title:dmTitle,body:preview,target_id:activeDm.id,source_id:data.id})
-        .then(({error:noticeError})=>{if(noticeError)console.warn('[NEXUS DM notification]',noticeError);});
-      void supabase.functions.invoke('nexus-push',{body:{
+      const notices=recipientIds.map((recipientId:string)=>({recipient_id:recipientId,actor_id:currentUser.id,type:'dm',title:activeDm.is_group?(activeDm.title||'그룹 DM')+' · '+senderName:dmTitle,body:preview,target_id:activeDm.id,source_id:data.id}));
+      if(notices.length)void supabase.from('notifications').insert(notices).then(({error:noticeError})=>{if(noticeError)console.warn('[NEXUS DM notification]',noticeError);});
+      recipientIds.forEach((recipientId:string)=>void supabase.functions.invoke('nexus-push',{body:{
         kind:'dm',recipient_id:recipientId,conversation_id:activeDm.id,
-        title:dmTitle,body:preview,tag:'nexus-dm-'+data.id,
+        title:activeDm.is_group?(activeDm.title||'그룹 DM'):dmTitle,body:preview,tag:'nexus-dm-'+data.id,
         url:'./?section=dms&conversation='+encodeURIComponent(activeDm.id)
-      }}).then(({error:pushError})=>{
-        if(pushError)console.warn('[NEXUS DM push]',pushError);
-      }).catch(error=>console.warn('[NEXUS DM push]',error));
+      }}).then(({error:pushError})=>{if(pushError)console.warn('[NEXUS DM push]',pushError);}).catch(error=>console.warn('[NEXUS DM push]',error)));
     }
   };
   const loadNotifications=async()=>{
@@ -1052,14 +1093,14 @@ function WorkspaceApp() {
           <div className="ai-input-wrap"><textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="NEXUS AI에게 요청하기..." rows={2}/><button onClick={askAi} aria-label="AI 요청 전송" disabled={aiBusy||!aiPrompt.trim()}><Send size={16}/></button><small>{aiBusy?'AI 답변 생성 중...':'서버에서 OpenAI 호환 AI API 호출 · 키는 브라우저에 노출되지 않습니다.'}</small></div>
         </aside>
       </div>:section==='dms'?<section className="feature-page">
-        <div className="feature-heading"><div><div className="eyebrow">PRIVATE CONVERSATIONS</div><h1>다이렉트 메시지</h1><p>친구로 등록된 실제 사용자와 대화합니다.</p></div></div>
+        <div className="feature-heading"><div><div className="eyebrow">PRIVATE CONVERSATIONS</div><h1>다이렉트 메시지</h1><p>친구와 개인·그룹 대화를 나눕니다.</p></div><button className="primary-action" onClick={()=>{setGroupDmSelected([]);setGroupDmOpen(true)}}><UserPlus size={16}/> 그룹 DM 만들기</button></div>
         <div className="dm-layout">
           <aside className="section-card dm-list"><div className="card-title"><MessageCircle size={18}/>대화 목록</div>
-            {dmConversations.map(c=><button className={'dm-person '+(activeDm?.id===c.id?'selected':'')} key={c.id} onClick={()=>setActiveDm(c)}><div className={'avatar violet decoration-'+(c.person?.profile_decoration||'none')} style={c.person?.theme_color?{borderColor:c.person.theme_color}:undefined}>{c.person?.avatar_url?<img src={c.person.avatar_url}/>:((c.person?.display_name||'U').slice(0,1))}</div><div><strong>{c.person?.display_name||'사용자'}</strong><small>{c.person?.bio||'친구'}</small></div></button>)}
+            {dmConversations.map(c=><button className={'dm-person '+(activeDm?.id===c.id?'selected':'')} key={c.id} onClick={()=>setActiveDm(c)}><div className={'avatar violet decoration-'+(c.person?.profile_decoration||'none')} style={c.person?.theme_color?{borderColor:c.person.theme_color}:undefined}>{c.is_group?<Users size={17}/>:c.person?.avatar_url?<img src={c.person.avatar_url}/>:((c.person?.display_name||'U').slice(0,1))}</div><div><strong>{c.title||c.person?.display_name||'사용자'}</strong><small>{c.is_group?(c.members?.length||0)+'명 그룹':c.person?.bio||'친구'}</small></div></button>)}
             {!dmConversations.length&&<div className="empty-state">친구를 추가한 뒤 친구 목록에서 DM을 시작하세요.</div>}
           </aside>
           <div className="section-card dm-chat">
-            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className={'avatar violet decoration-'+(activeDm.person?.profile_decoration||'none')} style={activeDm.person?.theme_color?{borderColor:activeDm.person.theme_color}:undefined}>{activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.person?.display_name||'친구'}</strong><small>비공개 대화</small></div><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button><button className="primary-action dm-call-button" onClick={startDirectCall} title="상대방에게 통화 걸기"><Phone size={14}/> 통화</button></div>
+            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:!activeDm.is_group&&activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className="avatar violet">{activeDm.is_group?<Users size={18}/>:activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.title||activeDm.person?.display_name||'친구'}</strong><small>{activeDm.is_group?(activeDm.members?.length||0)+'명 그룹 대화':'비공개 대화'}</small></div>{!activeDm.is_group&&<><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button><button className="primary-action dm-call-button" onClick={startDirectCall} title="상대방에게 통화 걸기"><Phone size={14}/> 통화</button></>}</div>
               <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time>{m.sender_id===currentUser?.id&&<small className="dm-read-state">{m.read_at?'읽음':'전송됨'}</small>}</div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
               <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
             </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
@@ -1151,7 +1192,7 @@ function WorkspaceApp() {
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='call'){const code=(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1];if(code)setIncomingCallCode(code.toUpperCase());setSection('meetings');}else if(n.type==='ping'||n.type==='dm'){const conversation=dmConversations.find(c=>c.id===n.target_id);if(conversation)setActiveDm(conversation);setSection('dms');}if(n.type==='friend_request')setSection('community');if(n.type==='mention'){const name=Object.keys(channelIds).find(k=>channelIds[k]===n.target_id);if(name)setActiveChannel(name);if(n.source_id)setHighlightedMessageId(n.source_id);setSection('messages');}setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
     {filePreview&&<div className="modal-backdrop file-preview-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFilePreview(null)}}><div className="file-preview-modal"><div className="file-preview-heading"><strong>{filePreview.name}</strong><button className="icon-button" onClick={()=>setFilePreview(null)} aria-label="미리보기 닫기"><X size={18}/></button></div><div className="file-preview-content">{String(filePreview.mime).startsWith('image/')?<img src={filePreview.url} alt={filePreview.name}/>:String(filePreview.mime).startsWith('video/')?<video src={filePreview.url} controls playsInline/>:String(filePreview.mime).startsWith('audio/')?<audio src={filePreview.url} controls/>:<iframe title={filePreview.name} src={filePreview.url}/>}</div><div className="file-preview-footer"><button className="secondary-action" onClick={()=>{window.open(filePreview.url,'_blank','noopener,noreferrer')}}>새 창에서 열기</button><button className="primary-action" onClick={()=>setFilePreview(null)}>닫기</button></div></div></div>}
-    {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><label>채널 유형</label><select value={channelTypeDraft} onChange={e=>setChannelTypeDraft(e.target.value as 'text'|'announcement'|'forum')}><option value="text">텍스트 채널</option><option value="announcement">공지 채널</option><option value="forum">포럼 채널</option></select><label>카테고리</label><select value={channelCategoryId} onChange={e=>setChannelCategoryId(e.target.value)}><option value="">카테고리 없음</option>{categories.map(cat=><option key={cat.id} value={cat.id}>{cat.name}</option>)}</select><p>채널 유형과 카테고리는 서버에 저장되며 모든 멤버에게 동기화됩니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
+    {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{groupDmOpen&&<div className="modal-backdrop"><div className="small-modal group-dm-modal"><div className="modal-title"><h2>그룹 DM 만들기</h2><button className="icon-button" onClick={()=>setGroupDmOpen(false)}><X/></button></div><label>그룹 이름 (선택)</label><input maxLength={80} value={groupDmName} onChange={e=>setGroupDmName(e.target.value)} placeholder="예: 게임 파티"/><p>친구를 2명 이상 선택하세요. 본인을 포함해 최대 10명까지 참여할 수 있습니다.</p><div className="group-dm-friends">{friends.map((friend:any)=><label key={friend.id} className={groupDmSelected.includes(friend.id)?'selected':''}><input type="checkbox" checked={groupDmSelected.includes(friend.id)} onChange={e=>setGroupDmSelected(v=>e.target.checked?[...v,friend.id]:v.filter(id=>id!==friend.id))}/><span className="avatar violet">{friend.avatar_url?<img src={friend.avatar_url}/>:String(friend.display_name||'U').slice(0,1)}</span><span>{friend.display_name||'사용자'}</span></label>)}{!friends.length&&<div className="empty-state">그룹 DM을 만들려면 먼저 친구를 추가하세요.</div>}</div><button className="primary-action full-action" disabled={groupDmBusy||groupDmSelected.length<2||groupDmSelected.length>9} onClick={createGroupDm}>{groupDmBusy?'만드는 중...':'그룹 DM 만들기'}</button></div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><label>채널 유형</label><select value={channelTypeDraft} onChange={e=>setChannelTypeDraft(e.target.value as 'text'|'announcement'|'forum')}><option value="text">텍스트 채널</option><option value="announcement">공지 채널</option><option value="forum">포럼 채널</option></select><label>카테고리</label><select value={channelCategoryId} onChange={e=>setChannelCategoryId(e.target.value)}><option value="">카테고리 없음</option>{categories.map(cat=><option key={cat.id} value={cat.id}>{cat.name}</option>)}</select><p>채널 유형과 카테고리는 서버에 저장되며 모든 멤버에게 동기화됩니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
 }
