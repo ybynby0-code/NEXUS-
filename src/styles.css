@@ -1432,3 +1432,27 @@ body::before{
 .dm-person .avatar{display:grid;place-items:center;overflow:hidden}
 .dm-person .avatar img{width:100%;height:100%;object-fit:cover}
 @media(max-width:600px){.group-dm-modal{width:calc(100vw - 24px);max-height:84dvh}.group-dm-friends{max-height:34dvh}}
+
+
+/* Discord-style channel permission editor */
+.channel-permission-modal{width:min(650px,calc(100vw - 28px));max-height:min(88dvh,820px);display:flex;flex-direction:column;overflow:hidden}
+.channel-permission-modal>.modal-title{flex:0 0 auto}
+.channel-privacy-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 2px 16px;border-bottom:1px solid rgba(155,170,205,.14);margin-bottom:13px}
+.channel-privacy-row>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.channel-privacy-row strong{font-size:13px;color:#edf2fb}
+.channel-privacy-row small,.permission-explainer{font-size:11px;line-height:1.55;color:#9aa9bd}
+.permission-toggle{min-width:82px;padding:8px 12px;border:1px solid rgba(155,170,205,.22);border-radius:9px;background:rgba(30,42,62,.8);color:#dce6f5;font-weight:700}
+.permission-toggle.enabled{border-color:#927eff;background:rgba(121,103,232,.2);color:#c9c0ff}
+.channel-permission-modal>label{font-size:12px;font-weight:700;color:#dfe7f5;margin-bottom:5px}
+.channel-permission-modal>select{width:100%;min-height:42px;margin:4px 0 9px;padding:0 11px;border:1px solid rgba(150,165,200,.22);border-radius:9px;background:#121d30;color:#edf2fb}
+.permission-explainer{padding:8px 10px;border-radius:8px;background:rgba(125,112,220,.09);margin-bottom:8px}
+.channel-permission-list{overflow:auto;min-height:100px;max-height:44dvh;overscroll-behavior:contain}
+.channel-permission-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid rgba(155,170,205,.1)}
+.channel-permission-item>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.channel-permission-item strong{font-size:12px;color:#e7edf8}
+.channel-permission-item small{font-size:10px;line-height:1.45;color:#91a0b7}
+.channel-permission-item select{flex:0 0 102px;min-height:36px;padding:0 8px;border:1px solid rgba(150,165,200,.22);border-radius:8px;background:#121d30;color:#edf2fb;font:inherit;font-size:11px}
+.permission-footer{display:flex;justify-content:flex-end;gap:8px;padding-top:13px}
+.permission-footer button{min-width:88px}
+.channel-permission-modal>.settings-note{margin:8px 0 0;font-size:10px;line-height:1.5}
+@media(max-width:600px){.channel-permission-modal{width:calc(100vw - 18px);max-height:88dvh;padding:15px}.channel-permission-list{max-height:42dvh}.channel-permission-item{gap:8px}.channel-permission-item select{flex-basis:94px}.channel-privacy-row{align-items:flex-start}}
