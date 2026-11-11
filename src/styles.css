@@ -1421,3 +1421,14 @@ body::before{
 .channel-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .small-modal select{width:100%;min-height:42px;margin:7px 0 12px;padding:0 12px;border:1px solid rgba(150,140,210,.2);border-radius:10px;background:var(--surface-2,#171925);color:var(--text-primary,#f5f4ff);font:inherit}
 @media(max-width:700px){.channel-category-heading{min-height:30px}.channel-heading-actions button{width:30px;height:30px}}
+
+.group-dm-modal{max-height:min(82dvh,720px);display:flex;flex-direction:column;overflow:hidden}
+.group-dm-friends{display:flex;flex-direction:column;gap:5px;max-height:300px;overflow:auto;padding:5px 0 12px}
+.group-dm-friends label{display:flex;align-items:center;gap:11px;padding:9px 10px;border:1px solid transparent;border-radius:11px;background:rgba(255,255,255,.025);cursor:pointer}
+.group-dm-friends label.selected{border-color:rgba(139,119,255,.48);background:rgba(139,119,255,.12)}
+.group-dm-friends label input{accent-color:#8b77ff}
+.group-dm-friends .avatar{display:grid;place-items:center;overflow:hidden;flex:0 0 34px;width:34px;height:34px}
+.group-dm-friends .avatar img{width:100%;height:100%;object-fit:cover}
+.dm-person .avatar{display:grid;place-items:center;overflow:hidden}
+.dm-person .avatar img{width:100%;height:100%;object-fit:cover}
+@media(max-width:600px){.group-dm-modal{width:calc(100vw - 24px);max-height:84dvh}.group-dm-friends{max-height:34dvh}}
