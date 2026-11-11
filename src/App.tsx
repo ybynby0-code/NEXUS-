@@ -48,6 +48,11 @@ function WorkspaceApp() {
   const [groupDmName,setGroupDmName] = useState('');
   const [groupDmSelected,setGroupDmSelected] = useState<string[]>([]);
   const [groupDmBusy,setGroupDmBusy] = useState(false);
+  const [groupDmManageOpen,setGroupDmManageOpen] = useState(false);
+  const [groupDmParticipants,setGroupDmParticipants] = useState<any[]>([]);
+  const [groupDmInviteSelected,setGroupDmInviteSelected] = useState<string[]>([]);
+  const [groupDmNameDraft,setGroupDmNameDraft] = useState('');
+  const [groupDmManageBusy,setGroupDmManageBusy] = useState(false);
   const [activeDm,setActiveDm] = useState<any>(null);
   const [dmMessages,setDmMessages] = useState<any[]>([]);
   const [dmDraft,setDmDraft] = useState('');
@@ -428,6 +433,63 @@ function WorkspaceApp() {
       await loadDmConversations();notify('그룹 DM을 만들었습니다.');
     }catch(e:any){notify('그룹 DM 생성 실패: '+(e?.message||'오류'));}
     finally{setGroupDmBusy(false);}
+  };
+  const refreshGroupDmParticipants=async(conversationId:string)=>{
+    if(!supabase)return [];
+    const {data:rows,error}=await supabase.from('dm_conversation_members').select('user_id,role,joined_at').eq('conversation_id',conversationId).order('joined_at',{ascending:true});
+    if(error)throw error;
+    const ids=(rows||[]).map((row:any)=>row.user_id);
+    const {data:people,error:peopleError}=ids.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio,profile_decoration,theme_color').in('id',ids):{data:[],error:null};
+    if(peopleError)throw peopleError;
+    const byId:Record<string,any>={};(people||[]).forEach((person:any)=>byId[person.id]=person);
+    const enriched=(rows||[]).map((row:any)=>({...row,person:byId[row.user_id]||{display_name:'사용자'}}));
+    setGroupDmParticipants(enriched);
+    return enriched;
+  };
+  const openGroupDmManage=async()=>{
+    if(!activeDm?.is_group||!supabase)return;
+    setGroupDmManageOpen(true);setGroupDmManageBusy(true);setGroupDmNameDraft(activeDm.name||activeDm.title||'');setGroupDmInviteSelected([]);
+    try{await refreshGroupDmParticipants(activeDm.id);}
+    catch(e:any){notify('그룹 멤버 조회 실패: '+(e?.message||'오류'));}
+    finally{setGroupDmManageBusy(false);}
+  };
+  const inviteGroupDmFriends=async()=>{
+    if(!supabase||!activeDm||!groupDmInviteSelected.length||groupDmManageBusy)return;
+    setGroupDmManageBusy(true);
+    try{
+      for(const userId of groupDmInviteSelected){const {error}=await supabase.rpc('manage_group_dm_member',{p_conversation_id:activeDm.id,p_target_user_id:userId,p_action:'invite'});if(error)throw error;}
+      setGroupDmInviteSelected([]);const rows=await refreshGroupDmParticipants(activeDm.id);
+      setActiveDm((current:any)=>current?.id===activeDm.id?{...current,members:rows.map((row:any)=>row.user_id),people:rows.filter((row:any)=>row.user_id!==currentUser?.id).map((row:any)=>row.person),title:current.name||current.title}:current);
+      await loadDmConversations();notify('선택한 친구를 그룹 DM에 초대했습니다.');
+    }catch(e:any){notify('초대 실패: '+(e?.message||'오류'));try{await refreshGroupDmParticipants(activeDm.id);}catch{}}
+    finally{setGroupDmManageBusy(false);}
+  };
+  const removeGroupDmMember=async(userId:string)=>{
+    if(!supabase||!activeDm||groupDmManageBusy)return;
+    if(!window.confirm('이 멤버를 그룹 DM에서 내보내시겠습니까?'))return;
+    setGroupDmManageBusy(true);
+    const {error}=await supabase.rpc('manage_group_dm_member',{p_conversation_id:activeDm.id,p_target_user_id:userId,p_action:'remove'});
+    if(error){notify('멤버 내보내기 실패: '+error.message);setGroupDmManageBusy(false);return;}
+    try{const rows=await refreshGroupDmParticipants(activeDm.id);setActiveDm((current:any)=>current?.id===activeDm.id?{...current,members:rows.map((row:any)=>row.user_id),people:rows.filter((row:any)=>row.user_id!==currentUser?.id).map((row:any)=>row.person)}:current);await loadDmConversations();notify('멤버를 그룹 DM에서 내보냈습니다.');}
+    catch(e:any){notify('멤버 목록 갱신 실패: '+e.message);}
+    finally{setGroupDmManageBusy(false);}
+  };
+  const renameGroupDm=async()=>{
+    if(!supabase||!activeDm||groupDmManageBusy)return;
+    const name=groupDmNameDraft.trim();if(!name){notify('그룹 이름을 입력해 주세요.');return;}
+    setGroupDmManageBusy(true);
+    const {error}=await supabase.rpc('rename_group_dm',{p_conversation_id:activeDm.id,p_name:name});
+    if(error){notify('그룹 이름 변경 실패: '+error.message);setGroupDmManageBusy(false);return;}
+    setActiveDm((current:any)=>current?.id===activeDm.id?{...current,name,title:name}:current);
+    await loadDmConversations();setGroupDmManageBusy(false);notify('그룹 이름을 변경했습니다.');
+  };
+  const leaveGroupDm=async()=>{
+    if(!supabase||!activeDm||groupDmManageBusy)return;
+    if(!window.confirm('이 그룹 DM에서 나가시겠습니까?'))return;
+    setGroupDmManageBusy(true);
+    const {error}=await supabase.rpc('manage_group_dm_member',{p_conversation_id:activeDm.id,p_target_user_id:currentUser?.id,p_action:'leave'});
+    if(error){notify('그룹 DM 나가기 실패: '+error.message);setGroupDmManageBusy(false);return;}
+    setGroupDmManageBusy(false);setGroupDmManageOpen(false);setActiveDm(null);setDmMessages([]);setGroupDmParticipants([]);await loadDmConversations();notify('그룹 DM에서 나왔습니다.');
   };
   const sendDm=async()=>{
     const content=dmDraft.trim();if(!content||!supabase||!currentUser||!activeDm)return;
@@ -1102,6 +1164,7 @@ function WorkspaceApp() {
       </header>
       {(!networkOnline||realtimeState==='reconnecting')&&<div className="connection-banner"><WifiOff size={15}/><span>{!networkOnline?'인터넷 연결이 끊겼습니다. 연결이 복구되면 실시간 기능을 다시 연결합니다.':'실시간 서버 연결이 불안정합니다. 메시지와 알림 동기화를 다시 시도해 주세요.'}</span><button onClick={()=>{supabase?.realtime.connect();window.location.reload();}}>다시 연결</button></div>}
 
+      {groupDmManageOpen&&activeDm?.is_group&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!groupDmManageBusy)setGroupDmManageOpen(false)}}><div className="small-modal group-dm-manage-modal"><div className="modal-title"><div><div className="eyebrow">GROUP CONVERSATION</div><h2>그룹 DM 관리</h2></div><button className="icon-button" disabled={groupDmManageBusy} onClick={()=>setGroupDmManageOpen(false)} aria-label="닫기"><X/></button></div><label>그룹 이름</label><div className="group-dm-rename-row"><input maxLength={80} value={groupDmNameDraft} onChange={e=>setGroupDmNameDraft(e.target.value)} placeholder="그룹 이름"/><button className="primary-action" disabled={groupDmManageBusy||!groupDmNameDraft.trim()} onClick={renameGroupDm}>저장</button></div><div className="card-title"><Users size={17}/>참여 멤버 <span>{groupDmParticipants.length}/10명</span></div>{groupDmManageBusy&&groupDmParticipants.length===0?<div className="empty-state">멤버를 불러오는 중...</div>:<div className="group-dm-member-list">{groupDmParticipants.map(member=><div className="group-dm-member-row" key={member.user_id}><div className="avatar violet">{member.person?.avatar_url?<img src={member.person.avatar_url}/>:String(member.person?.display_name||'U').slice(0,1)}</div><div><strong>{member.person?.display_name||'사용자'}</strong><small>{member.role==='owner'?'그룹 소유자':'멤버'}</small></div>{member.role==='owner'&&<span className="group-owner-badge">OWNER</span>}{member.user_id!==currentUser?.id&&member.role!=='owner'&&groupDmParticipants.some((m:any)=>m.user_id===currentUser?.id&&m.role==='owner')&&<button className="secondary-action group-remove-button" disabled={groupDmManageBusy} onClick={()=>removeGroupDmMember(member.user_id)}>내보내기</button>}</div>)}</div>}<div className="card-title group-invite-title"><UserPlus size={17}/>친구 초대 <span>{friends.filter((friend:any)=>!groupDmParticipants.some((m:any)=>m.user_id===friend.id)).length}명 가능</span></div><div className="group-dm-friend-picker">{friends.filter((friend:any)=>!groupDmParticipants.some((m:any)=>m.user_id===friend.id)).map((friend:any)=><label key={friend.id}><input type="checkbox" checked={groupDmInviteSelected.includes(friend.id)} onChange={e=>setGroupDmInviteSelected(v=>e.target.checked?[...v,friend.id]:v.filter(id=>id!==friend.id))}/><span>{friend.display_name||'사용자'}</span></label>)}{friends.filter((friend:any)=>!groupDmParticipants.some((m:any)=>m.user_id===friend.id)).length===0&&<div className="empty-state">초대할 수 있는 친구가 없습니다.</div>}</div><div className="group-dm-manage-actions"><button className="secondary-action leave-group-button" disabled={groupDmManageBusy} onClick={leaveGroupDm}>그룹 DM 나가기</button><button className="primary-action" disabled={groupDmManageBusy||!groupDmInviteSelected.length||groupDmParticipants.length+groupDmInviteSelected.length>10} onClick={inviteGroupDmFriends}>{groupDmManageBusy?'처리 중...':'선택한 친구 초대'}</button></div><p className="settings-note">그룹은 최대 10명까지 참여할 수 있습니다. 소유자가 나가면 가장 먼저 참여한 멤버에게 소유권이 이전됩니다.</p></div></div>}
       {section==='home'?<section className="feature-page home-page">
         <div className="home-welcome"><div><div className="eyebrow">NEXUS WORKSPACE</div><h1>안녕하세요, {profile.display_name||currentUser?.name||'사용자'}님</h1><p>오늘 필요한 대화와 협업 도구를 한곳에서 시작하세요.</p></div><div className="home-status"><i/>{dbReady?'모든 서비스 연결됨':'서비스 연결 확인 중'}</div></div>
         <div className="home-metrics"><button onClick={()=>setSection('messages')}><span className="home-metric-icon"><MessageCircle size={18}/></span><strong>{channels.length}</strong><small>채널</small></button><button onClick={()=>setSection('community')}><span className="home-metric-icon"><Users size={18}/></span><strong>{members.length}</strong><small>워크스페이스 멤버</small></button><button onClick={()=>setSection('meetings')}><span className="home-metric-icon"><Activity size={18}/></span><strong>{onlineCount}</strong><small>현재 접속 중</small></button></div>
@@ -1137,7 +1200,7 @@ function WorkspaceApp() {
             {!dmConversations.length&&<div className="empty-state">친구를 추가한 뒤 친구 목록에서 DM을 시작하세요.</div>}
           </aside>
           <div className="section-card dm-chat">
-            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:!activeDm.is_group&&activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className="avatar violet">{activeDm.is_group?<Users size={18}/>:activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.title||activeDm.person?.display_name||'친구'}</strong><small>{activeDm.is_group?(activeDm.members?.length||0)+'명 그룹 대화':'비공개 대화'}</small></div>{!activeDm.is_group&&<><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button><button className="primary-action dm-call-button" onClick={startDirectCall} title="상대방에게 통화 걸기"><Phone size={14}/> 통화</button></>}</div>
+            {activeDm?<><div className="dm-chat-head" style={{backgroundImage:!activeDm.is_group&&activeDm.person?.banner_url?'linear-gradient(90deg,#101827e8,#101827b8),url("'+activeDm.person.banner_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'}}><div className="avatar violet">{activeDm.is_group?<Users size={18}/>:activeDm.person?.avatar_url?<img src={activeDm.person.avatar_url}/>:((activeDm.person?.display_name||'U').slice(0,1))}</div><div><strong>{activeDm.title||activeDm.person?.display_name||'친구'}</strong><small>{activeDm.is_group?(activeDm.members?.length||0)+'명 그룹 대화':'비공개 대화'}</small></div>{activeDm.is_group&&<button className="secondary-action dm-ping-button" onClick={openGroupDmManage}><Users size={14}/> 그룹 관리</button>}{!activeDm.is_group&&<><button className="secondary-action dm-ping-button" onClick={sendPing} title="상대방에게 핑 보내기"><Bell size={14}/> 핑</button><button className="primary-action dm-call-button" onClick={startDirectCall} title="상대방에게 통화 걸기"><Phone size={14}/> 통화</button></>}</div>
               <div className="dm-message-list">{dmMessages.map(m=><div className={'dm-bubble-row '+(m.sender_id===currentUser?.id?'mine':'')} key={m.id}><div className="dm-bubble"><p>{m.content}</p><time>{new Date(m.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</time>{m.sender_id===currentUser?.id&&<small className="dm-read-state">{m.read_at?'읽음':'전송됨'}</small>}</div></div>)}{!dmMessages.length&&<div className="empty-state">대화를 시작해 보세요.</div>}</div>
               <div className="dm-composer"><input value={dmDraft} onChange={e=>setDmDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendDm()} placeholder="메시지 입력..."/><button className="primary-action" onClick={sendDm}><Send size={16}/>전송</button></div>
             </>:<div className="empty-state dm-empty">왼쪽에서 대화를 선택하거나 커뮤니티에서 친구에게 DM을 보내세요.</div>}
