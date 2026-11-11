@@ -36,6 +36,22 @@ Deno.serve(async (req: Request) => {
     const prompt = String(body?.prompt || "").trim();
     if (!prompt) return json({ ok: false, error: "질문을 입력해 주세요." }, 400);
     if (prompt.length > 8000) return json({ ok: false, error: "질문은 8,000자 이하로 입력해 주세요." }, 413);
+    const apiKey = Deno.env.get("AI_API_KEY");
+    const endpoint = Deno.env.get("AI_API_URL") || "https://api.openai.com/v1/chat/completions";
+    const model = Deno.env.get("AI_MODEL") || "gpt-4o-mini";
+    if (!apiKey) {
+      return json({
+        ok: false,
+        code: "AI_NOT_CONFIGURED",
+        error: "AI_API_KEY가 설정되지 않았습니다. Supabase Edge Function Secrets에 AI_API_KEY를 등록해야 합니다.",
+      }, 503);
+    }
+
+    const parsedEndpoint = new URL(endpoint);
+    if (parsedEndpoint.protocol !== "https:") {
+      return json({ ok: false, error: "AI_API_URL은 HTTPS 주소여야 합니다." }, 400);
+    }
+
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!serviceRoleKey) return json({ ok: false, error: "AI 사용량 보호 설정이 없습니다." }, 503);
     const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -52,22 +68,6 @@ Deno.serve(async (req: Request) => {
     })).filter((item: any) => item.content.trim()) : [];
     const contextTitle = String(body?.contextTitle || "최근 대화").slice(0, 100);
     const contextText = contextRows.map((item: any) => item.author + ": " + item.content).join("\n").slice(0, 9000);
-
-    const apiKey = Deno.env.get("AI_API_KEY");
-    const endpoint = Deno.env.get("AI_API_URL") || "https://api.openai.com/v1/chat/completions";
-    const model = Deno.env.get("AI_MODEL") || "gpt-4o-mini";
-    if (!apiKey) {
-      return json({
-        ok: false,
-        code: "AI_NOT_CONFIGURED",
-        error: "AI_API_KEY가 설정되지 않았습니다. Supabase Edge Function Secrets에 AI_API_KEY를 등록해야 합니다.",
-      }, 503);
-    }
-
-    const parsedEndpoint = new URL(endpoint);
-    if (parsedEndpoint.protocol !== "https:") {
-      return json({ ok: false, error: "AI_API_URL은 HTTPS 주소여야 합니다." }, 400);
-    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
