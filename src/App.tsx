@@ -16,6 +16,10 @@ function WorkspaceApp() {
   const [section,setSection] = useState<Section>('home');
   const [activeChannel,setActiveChannel] = useState('general');
   const [channels,setChannels] = useState(initialChannels);
+  const [channelRows,setChannelRows] = useState<any[]>([]);
+  const [categories,setCategories] = useState<any[]>([]);
+  const [channelCategoryId,setChannelCategoryId] = useState('');
+  const [channelTypeDraft,setChannelTypeDraft] = useState<'text'|'announcement'|'forum'>('text');
   const [workspaces,setWorkspaces] = useState<any[]>([]);
   const [workspaceMenuOpen,setWorkspaceMenuOpen] = useState(false);
   const [workspaceDraft,setWorkspaceDraft] = useState('');
@@ -247,10 +251,13 @@ function WorkspaceApp() {
       if(!alive)return;
       setWorkspaces((workspaceRows||[]).filter((row:any)=>populatedWorkspaceIds.has(row.id)));
       setWorkspaceId(wid!);
-      const {data:rows,error:rowsError}=await supabase.from('channels').select('id,name').eq('workspace_id',wid!).order('created_at');
-      if(rowsError)throw rowsError;
+      const [{data:rows,error:rowsError},{data:categoryRows,error:categoryError}]=await Promise.all([
+        supabase.from('channels').select('id,name,category_id,channel_type,topic,position,is_private').eq('workspace_id',wid!).order('position').order('created_at'),
+        supabase.from('workspace_categories').select('id,name,position,collapsed').eq('workspace_id',wid!).order('position').order('created_at')
+      ]);
+      if(rowsError)throw rowsError;if(categoryError)throw categoryError;
       const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
-      setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));
+      setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));setChannelRows(rows||[]);setCategories(categoryRows||[]);
       if(rows?.[0])setActiveChannel(rows[0].name);
       setDbReady(true);
     };
@@ -306,17 +313,21 @@ function WorkspaceApp() {
     if(!supabase||!dbReady||!workspaceId)return;
     let alive=true;
     const refreshChannels=async()=>{
-      const {data,error}=await supabase.from('channels').select('id,name').eq('workspace_id',workspaceId).order('created_at');
-      if(error){console.warn('[NEXUS channels realtime]',error);return;}
+      const [{data,error},{data:categoryRows,error:categoryError}]=await Promise.all([
+        supabase.from('channels').select('id,name,category_id,channel_type,topic,position,is_private').eq('workspace_id',workspaceId).order('position').order('created_at'),
+        supabase.from('workspace_categories').select('id,name,position,collapsed').eq('workspace_id',workspaceId).order('position').order('created_at')
+      ]);
+      if(error||categoryError){console.warn('[NEXUS channel structure realtime]',error||categoryError);return;}
       if(!alive)return;
       const map:Record<string,string>={};(data||[]).forEach((c:any)=>map[c.name]=c.id);
-      setChannelIds(map);setChannels((data||[]).map((c:any)=>c.name));
+      setChannelIds(map);setChannels((data||[]).map((c:any)=>c.name));setChannelRows(data||[]);setCategories(categoryRows||[]);
       setActiveChannel(current=>(data||[]).some((c:any)=>c.name===current)?current:(data?.[0]?.name||'general'));
     };
     const sub=supabase.channel('nexus-workspace-channels-'+workspaceId)
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'channels',filter:'workspace_id=eq.'+workspaceId},refreshChannels)
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'channels',filter:'workspace_id=eq.'+workspaceId},refreshChannels)
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'channels'},refreshChannels)
+      .on('postgres_changes',{event:'*',schema:'public',table:'workspace_categories',filter:'workspace_id=eq.'+workspaceId},refreshChannels)
       .subscribe();
     return()=>{alive=false;void supabase.removeChannel(sub)};
   },[supabase,dbReady,workspaceId]);
@@ -330,13 +341,14 @@ function WorkspaceApp() {
       try{
         const {data,error}=await supabase.functions.invoke('workspace-join-link',{body:{action:'accept',token}});
         if(error||!data?.ok)throw new Error(data?.error||error?.message||'초대 링크 수락 실패');
-        const [{data:rows,error:channelError},{data:allWorkspaces,error:workspaceError}]=await Promise.all([
-          supabase.from('channels').select('id,name').eq('workspace_id',data.workspace_id).order('created_at'),
-          supabase.from('workspaces').select('id,name,owner_id').order('created_at')
+        const [{data:rows,error:channelError},{data:allWorkspaces,error:workspaceError},{data:categoryRows,error:categoryError}]=await Promise.all([
+          supabase.from('channels').select('id,name,category_id,channel_type,topic,position,is_private').eq('workspace_id',data.workspace_id).order('position').order('created_at'),
+          supabase.from('workspaces').select('id,name,owner_id').order('created_at'),
+          supabase.from('workspace_categories').select('id,name,position,collapsed').eq('workspace_id',data.workspace_id).order('position')
         ]);
-        if(channelError)throw channelError;if(workspaceError)throw workspaceError;
+        if(channelError)throw channelError;if(workspaceError)throw workspaceError;if(categoryError)throw categoryError;
         const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
-        setWorkspaces(allWorkspaces||[]);setWorkspaceId(data.workspace_id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));
+        setWorkspaces(allWorkspaces||[]);setWorkspaceId(data.workspace_id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));setChannelRows(rows||[]);setCategories(categoryRows||[]);
         if(rows?.[0])setActiveChannel(rows[0].name);
         setSection('messages');setMobilePanel('none');
         window.history.replaceState({},'',window.location.pathname);
@@ -611,10 +623,14 @@ function WorkspaceApp() {
     const timer=window.setTimeout(()=>runGlobalSearch(q),250);return()=>window.clearTimeout(timer);
   },[searchOpen,searchQuery,workspaceId,channelIds,dmConversations]);
   const switchWorkspace=async(id:string)=>{
-    if(!supabase)return;const {data:rows,error}=await supabase.from('channels').select('id,name').eq('workspace_id',id).order('created_at');
-    if(error){notify('워크스페이스 전환 실패: '+error.message);return;}
+    if(!supabase)return;
+    const [{data:rows,error},{data:categoryRows,error:categoryError}]=await Promise.all([
+      supabase.from('channels').select('id,name,category_id,channel_type,topic,position,is_private').eq('workspace_id',id).order('position').order('created_at'),
+      supabase.from('workspace_categories').select('id,name,position,collapsed').eq('workspace_id',id).order('position')
+    ]);
+    if(error||categoryError){notify('워크스페이스 전환 실패: '+(error||categoryError)!.message);return;}
     const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
-    setWorkspaceId(id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));if(rows?.[0])setActiveChannel(rows[0].name);
+    setWorkspaceId(id);setChannelIds(map);setChannels((rows||[]).map((c:any)=>c.name));setChannelRows(rows||[]);setCategories(categoryRows||[]);if(rows?.[0])setActiveChannel(rows[0].name);
     setSection('messages');setWorkspaceMenuOpen(false);setMobilePanel('none');setActiveDm(null);setDmMessages([]);setMessages([]);
   };
   const createWorkspace=async()=>{
@@ -760,14 +776,21 @@ function WorkspaceApp() {
       notify(message);
     }finally{setAiBusy(false);}
   };
+  const createChannelCategory=async()=>{
+    const name=window.prompt('새 카테고리 이름을 입력하세요.','새 카테고리');
+    if(!name?.trim()||!supabase||!workspaceId||!currentUser)return;
+    const {data,error}=await supabase.from('workspace_categories').insert({workspace_id:workspaceId,name:name.trim(),position:categories.length,created_by:currentUser.id}).select('id,name,position,collapsed').single();
+    if(error){notify('카테고리 생성 실패: '+error.message);return;}
+    setCategories(v=>[...v,data]);setChannelCategoryId(data.id);notify('카테고리를 생성했습니다.');
+  };
   const addChannel=async()=>{
     const name=channelDraft.trim().toLowerCase().replace(/[^a-z0-9가-힣_-]/g,'-');
     if(!name){notify('채널 이름을 입력해 주세요.');return}
     if(channels.includes(name)){notify('이미 존재하는 채널입니다.');return}
     if(!supabase||!workspaceId||!currentUser){notify('서버 연결이 준비되지 않았습니다.');return;}
-    const {data,error}=await supabase.from('channels').insert({workspace_id:workspaceId,name,created_by:currentUser.id}).select('id,name').single();
+    const {data,error}=await supabase.from('channels').insert({workspace_id:workspaceId,name,created_by:currentUser.id,category_id:channelCategoryId||null,channel_type:channelTypeDraft,position:channelRows.length}).select('id,name,category_id,channel_type,topic,position,is_private').single();
     if(error){notify('채널 생성 실패: '+error.message);return;}
-    setChannels(v=>[...v,name]);setChannelIds(v=>({...v,[name]:data.id}));setActiveChannel(name);setSection('messages');setChannelDraft('');setChannelDialog(false);notify('#'+name+' 채널을 생성했습니다.');
+    setChannels(v=>[...v,name]);setChannelIds(v=>({...v,[name]:data.id}));setChannelRows(v=>[...v,data]);setActiveChannel(name);setSection('messages');setChannelDraft('');setChannelDialog(false);setChannelTypeDraft('text');notify('#'+name+' 채널을 생성했습니다.');
   };
   const loadWorkspacePeople=async()=>{
     if(!supabase||!workspaceId)return;
@@ -840,8 +863,11 @@ function WorkspaceApp() {
     if(error){notify('초대 수락 실패: '+error.message);return;}
     notify('워크스페이스에 참여했습니다.');
     if(data?.workspace_id){
-      const {data:rows,error:channelError}=await supabase.from('channels').select('id,name').eq('workspace_id',data.workspace_id).order('created_at');
-      if(channelError){notify('참여했지만 채널을 불러오지 못했습니다: '+channelError.message);return;}
+      const [{data:rows,error:channelError},{data:categoryRows,error:categoryError}]=await Promise.all([
+        supabase.from('channels').select('id,name,category_id,channel_type,topic,position,is_private').eq('workspace_id',data.workspace_id).order('position').order('created_at'),
+        supabase.from('workspace_categories').select('id,name,position,collapsed').eq('workspace_id',data.workspace_id).order('position')
+      ]);
+      if(channelError||categoryError){notify('참여했지만 채널 구조를 불러오지 못했습니다: '+(channelError||categoryError)!.message);return;}
       const map:Record<string,string>={};(rows||[]).forEach((c:any)=>map[c.name]=c.id);
       const {data:allWorkspaces}=await supabase.from('workspaces').select('id,name,owner_id').order('created_at');
       const {data:allChannels}=await supabase.from('channels').select('workspace_id');
@@ -849,7 +875,7 @@ function WorkspaceApp() {
       setWorkspaces((allWorkspaces||[]).filter((row:any)=>populatedIds.has(row.id)));
       setWorkspaceId(data.workspace_id);
       setChannelIds(map);
-      setChannels((rows||[]).map((c:any)=>c.name));
+      setChannels((rows||[]).map((c:any)=>c.name));setChannelRows(rows||[]);setCategories(categoryRows||[]);
       if(rows?.[0])setActiveChannel(rows[0].name);
       setSection('messages');
       setMobilePanel('none');
@@ -975,8 +1001,9 @@ function WorkspaceApp() {
       <button className={`side-link ${section==='files'?'selected':''}`} onClick={()=>{setSection('files');setMobilePanel('none')}}><FolderOpen size={17}/>파일 보관함</button>
       <button className="side-link" onClick={()=>{setSettingsOpen(true);setMobilePanel('none')}}><Settings size={17}/>프로필 및 설정</button>
       {adminRole&&<><div className="side-label">관리</div><button className={`side-link admin-nav-link ${section==='admin'?'selected':''}`} onClick={()=>{setSection('admin');setMobilePanel('none')}}><ShieldCheck size={17}/>관리자 센터</button></>}
-      <div className="side-label channels-label">채널 <button aria-label="채널 추가" onClick={()=>setChannelDialog(true)}><Plus size={15}/></button></div>
-      {channels.map(ch=><button key={ch} className={`channel-link ${activeChannel===ch?'channel-active':''}`} onClick={()=>{setActiveChannel(ch);setSection('messages');setMobilePanel('none')}}><Hash size={15}/>{ch}</button>)}
+      <div className="side-label channels-label">채널 <span className="channel-heading-actions"><button aria-label="카테고리 추가" onClick={createChannelCategory}><FolderOpen size={14}/></button><button aria-label="채널 추가" onClick={()=>{setChannelCategoryId('');setChannelDialog(true)}}><Plus size={15}/></button></span></div>
+      {categories.map(cat=><div className="channel-category" key={cat.id}><div className="channel-category-heading"><span>{cat.name}</span><button aria-label={cat.name+'에 채널 추가'} onClick={()=>{setChannelCategoryId(cat.id);setChannelDialog(true)}}><Plus size={13}/></button></div>{channelRows.filter(ch=>ch.category_id===cat.id).map(ch=><button key={ch.id} className={`channel-link ${activeChannel===ch.name?'channel-active':''}`} onClick={()=>{setActiveChannel(ch.name);setSection('messages');setMobilePanel('none')}}>{ch.channel_type==='announcement'?<Bell size={15}/>:ch.channel_type==='forum'?<MessageCircle size={15}/>:<Hash size={15}/>}<span>{ch.name}</span></button>)}</div>)}
+      {channelRows.some(ch=>!ch.category_id)&&<div className="channel-category"><div className="channel-category-heading"><span>기타 채널</span></div>{channelRows.filter(ch=>!ch.category_id).map(ch=><button key={ch.id} className={`channel-link ${activeChannel===ch.name?'channel-active':''}`} onClick={()=>{setActiveChannel(ch.name);setSection('messages');setMobilePanel('none')}}>{ch.channel_type==='announcement'?<Bell size={15}/>:ch.channel_type==='forum'?<MessageCircle size={15}/>:<Hash size={15}/>}<span>{ch.name}</span></button>)}</div>}
       <div className="side-bottom"><div className="online-dot"/><span>실시간 접속</span><span className="online-text">{onlineCount}명</span></div>
     </aside>
     <nav className="mobile-bottom-nav" aria-label="주요 메뉴">
@@ -1124,7 +1151,7 @@ function WorkspaceApp() {
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='call'){const code=(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1];if(code)setIncomingCallCode(code.toUpperCase());setSection('meetings');}else if(n.type==='ping'||n.type==='dm'){const conversation=dmConversations.find(c=>c.id===n.target_id);if(conversation)setActiveDm(conversation);setSection('dms');}if(n.type==='friend_request')setSection('community');if(n.type==='mention'){const name=Object.keys(channelIds).find(k=>channelIds[k]===n.target_id);if(name)setActiveChannel(name);if(n.source_id)setHighlightedMessageId(n.source_id);setSection('messages');}setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
     {filePreview&&<div className="modal-backdrop file-preview-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setFilePreview(null)}}><div className="file-preview-modal"><div className="file-preview-heading"><strong>{filePreview.name}</strong><button className="icon-button" onClick={()=>setFilePreview(null)} aria-label="미리보기 닫기"><X size={18}/></button></div><div className="file-preview-content">{String(filePreview.mime).startsWith('image/')?<img src={filePreview.url} alt={filePreview.name}/>:String(filePreview.mime).startsWith('video/')?<video src={filePreview.url} controls playsInline/>:String(filePreview.mime).startsWith('audio/')?<audio src={filePreview.url} controls/>:<iframe title={filePreview.name} src={filePreview.url}/>}</div><div className="file-preview-footer"><button className="secondary-action" onClick={()=>{window.open(filePreview.url,'_blank','noopener,noreferrer')}}>새 창에서 열기</button><button className="primary-action" onClick={()=>setFilePreview(null)}>닫기</button></div></div></div>}
-    {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><p>영문, 숫자, 한글, 하이픈을 사용할 수 있습니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
+    {attachDialogOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setAttachDialogOpen(false)}}><div className="small-modal"><div className="modal-title"><h2>메시지에 파일 첨부</h2><button className="icon-button" onClick={()=>setAttachDialogOpen(false)}><X/></button></div>{attachBusy?<div className="empty-state">파일을 불러오고 있습니다...</div>:attachableFiles.length?attachableFiles.map(file=><div className="member-row" key={file.id}><div className="file-type"><FileText size={16}/></div><div><strong>{file.file_name}</strong><small>{(file.size_bytes/1024/1024).toFixed(2)} MB</small></div><button className="primary-action" disabled={attachBusy} onClick={()=>attachWorkspaceFile(file)}>첨부 및 전송</button></div>):<div className="empty-state">공유된 파일이 없습니다. 파일 페이지에서 먼저 업로드해 주세요.<button className="secondary-action" onClick={()=>{setAttachDialogOpen(false);setSection('files')}}>파일 페이지 열기</button></div>}</div></div>}{channelDialog&&<div className="modal-backdrop"><div className="small-modal"><div className="modal-title"><h2>채널 만들기</h2><button className="icon-button" onClick={()=>setChannelDialog(false)}><X/></button></div><label>채널 이름</label><input value={channelDraft} onChange={e=>setChannelDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addChannel()} placeholder="예: design-team"/><label>채널 유형</label><select value={channelTypeDraft} onChange={e=>setChannelTypeDraft(e.target.value as 'text'|'announcement'|'forum')}><option value="text">텍스트 채널</option><option value="announcement">공지 채널</option><option value="forum">포럼 채널</option></select><label>카테고리</label><select value={channelCategoryId} onChange={e=>setChannelCategoryId(e.target.value)}><option value="">카테고리 없음</option>{categories.map(cat=><option key={cat.id} value={cat.id}>{cat.name}</option>)}</select><p>채널 유형과 카테고리는 서버에 저장되며 모든 멤버에게 동기화됩니다.</p><button className="primary-action full-action" onClick={addChannel}><Plus size={16}/> 채널 생성</button></div></div>}
     {toast&&<div className="toast"><Check size={16}/>{toast}</div>}
   </div>;
 }
