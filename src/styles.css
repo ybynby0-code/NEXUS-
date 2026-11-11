@@ -1284,7 +1284,7 @@ body{background:var(--nx-bg);color:#f2f3f5}
   --nx-orange:#8b82ff;
   --nx-orange-soft:rgba(139,130,255,.16);
 }
-html,body,#root{min-height:100%;background:#080d18!important}
+html,body{min-height:100%;background:#080d18!important}#root{min-height:100%;background:transparent!important}
 body{color:#edf2fb!important;isolation:isolate}
 body::before{
   content:"";
