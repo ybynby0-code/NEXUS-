@@ -666,7 +666,7 @@ alter table public.ai_request_usage enable row level security;
 drop policy if exists ai_request_usage_server_only on public.ai_request_usage;
 create policy ai_request_usage_server_only on public.ai_request_usage for all to anon,authenticated using(false) with check(false);
 
-create or replace function private.consume_ai_request_limit(p_user_id uuid,p_daily_limit integer default 60)
+create or replace function public.consume_ai_request_limit(p_user_id uuid,p_daily_limit integer default 60)
 returns table(allowed boolean,remaining integer,reset_at timestamptz)
 language plpgsql security definer set search_path = '' as $$
 declare v_count integer; v_limit integer:=greatest(1,least(coalesce(p_daily_limit,60),120)); v_day date:=(now() at time zone 'UTC')::date;
@@ -679,5 +679,5 @@ begin
   else return query select true,greatest(0,v_limit-v_count),((v_day+1)::timestamp at time zone 'UTC'); end if;
 end;
 $$;
-revoke all on function private.consume_ai_request_limit(uuid,integer) from public,anon,authenticated;
-grant execute on function private.consume_ai_request_limit(uuid,integer) to service_role;
+revoke all on function public.consume_ai_request_limit(uuid,integer) from public,anon,authenticated;
+grant execute on function public.consume_ai_request_limit(uuid,integer) to service_role;
