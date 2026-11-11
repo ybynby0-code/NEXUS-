@@ -370,11 +370,11 @@ function WorkspaceApp() {
     const conversations=(memberships||[]).map((row:any)=>row.dm_conversations).filter(Boolean);
     const ids=[...new Set(conversations.map((c:any)=>c.id))];
     if(!ids.length){setDmConversations([]);return;}
-    const [{data:participants,error:participantError},{data:people,error:peopleError}]=await Promise.all([
-      supabase.from('dm_conversation_members').select('conversation_id,user_id,role').in('conversation_id',ids),
-      supabase.from('profiles').select('id,display_name,avatar_url,bio,banner_url,profile_decoration,theme_color').in('id',[...new Set((memberships||[]).map((m:any)=>m.user_id))])
-    ]);
-    if(participantError||peopleError){notify('대화 참여자 조회 실패: '+(participantError||peopleError)!.message);return;}
+    const {data:participants,error:participantError}=await supabase.from('dm_conversation_members').select('conversation_id,user_id,role').in('conversation_id',ids);
+    if(participantError){notify('대화 참여자 조회 실패: '+participantError.message);return;}
+    const participantIds=[...new Set((participants||[]).map((m:any)=>m.user_id))];
+    const {data:people,error:peopleError}=participantIds.length?await supabase.from('profiles').select('id,display_name,avatar_url,bio,banner_url,profile_decoration,theme_color').in('id',participantIds):{data:[],error:null};
+    if(peopleError){notify('대화 프로필 조회 실패: '+peopleError.message);return;}
     const byId:Record<string,any>={};(people||[]).forEach((p:any)=>byId[p.id]=p);
     const participantMap:Record<string,string[]>={};(participants||[]).forEach((m:any)=>{(participantMap[m.conversation_id]??=[]).push(m.user_id);});
     setDmConversations(conversations.map((c:any)=>{
@@ -393,7 +393,7 @@ function WorkspaceApp() {
   const openDm=async(person:any)=>{
     if(!supabase||!currentUser)return;
     const pair=[currentUser.id,person.id].sort();
-    let {data,error}=await supabase.from('dm_conversations').select('*').eq('member_one',pair[0]).eq('member_two',pair[1]).maybeSingle();
+    let {data,error}=await supabase.from('dm_conversations').select('*').eq('member_one',pair[0]).eq('member_two',pair[1]).eq('is_group',false).maybeSingle();
     if(error){notify('DM 열기 실패: '+error.message);return;}
     if(!data){const result=await supabase.from('dm_conversations').insert({member_one:pair[0],member_two:pair[1]}).select('*').single();if(result.error){notify('친구 수락 후 DM을 시작할 수 있습니다. '+result.error.message);return;}data=result.data;}
     setActiveDm({...data,person});setSection('dms');setMobilePanel('none');loadDmConversations();
