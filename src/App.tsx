@@ -44,6 +44,9 @@ function WorkspaceApp() {
   const [dmMessages,setDmMessages] = useState<any[]>([]);
   const [dmDraft,setDmDraft] = useState('');
   const [notifications,setNotifications] = useState<any[]>([]);
+  const [pushRegistered,setPushRegistered] = useState(false);
+  const [pushPermission,setPushPermission] = useState<string>(()=>'Notification' in window?Notification.permission:'unsupported');
+  const [pushBusy,setPushBusy] = useState(false);
   const [profile,setProfile] = useState({display_name:'',bio:'',status_text:'',avatar_url:'',banner_url:'',theme_background_url:'',theme_color:'#7867e8',profile_decoration:'none',theme_mode:'dark'});
   const [themeSettings,setThemeSettings] = useState({glow_a:'#7567e8',glow_b:'#2b91b8',intensity:18,blur:18,brightness:100,animated:false,name_color:'#d9d5ff'});
   const [profileBusy,setProfileBusy] = useState(false);
@@ -132,6 +135,20 @@ function WorkspaceApp() {
     }).catch(()=>{});
     return()=>{window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);window.removeEventListener('beforeinstallprompt',onBeforeInstall as EventListener);window.removeEventListener('appinstalled',onInstalled);navigator.serviceWorker?.removeEventListener('controllerchange',onControllerChange);};
   },[]);
+  useEffect(()=>{
+    if(!currentUser)return;
+    let alive=true;
+    const syncPushState=async()=>{
+      if('Notification' in window&&alive)setPushPermission(Notification.permission);
+      if(!('serviceWorker' in navigator)||!('PushManager' in window)){if(alive)setPushRegistered(false);return;}
+      try{const registration=await navigator.serviceWorker.ready;const subscription=await registration.pushManager.getSubscription();if(alive)setPushRegistered(!!subscription);}
+      catch(error){console.warn('[NEXUS push status]',error);if(alive)setPushRegistered(false);}
+    };
+    void syncPushState();
+    const onFocus=()=>void syncPushState();
+    window.addEventListener('focus',onFocus);
+    return()=>{alive=false;window.removeEventListener('focus',onFocus);};
+  },[currentUser?.id]);
   useEffect(()=>{
     if(!supabase||!currentUser)return;
     let sessionId='';
@@ -411,8 +428,10 @@ function WorkspaceApp() {
   const enablePushNotifications=async()=>{
     if(!supabase){notify('서버 연결이 필요합니다.');return;}
     if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){notify('이 브라우저는 웹 푸시를 지원하지 않습니다.');return;}
+    setPushBusy(true);
     try{
-      const permission=await Notification.requestPermission();if(permission!=='granted'){notify('시스템 알림 권한을 허용해 주세요.');return;}
+      const permission=await Notification.requestPermission();setPushPermission(permission);
+      if(permission!=='granted')throw new Error('시스템 알림 권한을 허용해 주세요.');
       const {data:keyData,error:keyError}=await supabase.functions.invoke('nexus-push',{body:{action:'public_key'}});
       if(keyError||!keyData?.public_key)throw new Error(keyError?.message||'푸시 공개키를 가져오지 못했습니다.');
       const publicKey=keyData.public_key as string;
@@ -423,15 +442,25 @@ function WorkspaceApp() {
       const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error('로그인이 필요합니다.');
       const payload=subscription.toJSON();
       if(!payload.keys?.p256dh||!payload.keys?.auth)throw new Error('브라우저가 푸시 암호화 키를 반환하지 않았습니다.');
-      const {error}=await supabase.from('push_subscriptions').upsert({
-        user_id:user.id,
-        endpoint:subscription.endpoint,
-        p256dh:payload.keys.p256dh,
-        auth:payload.keys.auth
-      },{onConflict:'endpoint'});
+      const {error}=await supabase.from('push_subscriptions').upsert({user_id:user.id,endpoint:subscription.endpoint,p256dh:payload.keys.p256dh,auth:payload.keys.auth},{onConflict:'endpoint'});
       if(error)throw error;
-      notify('이 기기의 시스템 푸시 알림을 등록했습니다.');
+      setPushRegistered(true);notify('이 기기의 백그라운드 푸시 알림을 등록했습니다.');
     }catch(e:any){console.error('[NEXUS push registration]',e);notify('푸시 등록 실패: '+(e?.message||String(e)||'오류'));}
+    finally{setPushBusy(false);}
+  };
+  const sendPushTest=async()=>{
+    if(!supabase||pushBusy)return;setPushBusy(true);
+    try{const {data,error}=await supabase.functions.invoke('nexus-push',{body:{action:'test'}});if(error)throw error;if(!data?.ok)throw new Error(data?.error||'테스트 알림을 전송하지 못했습니다.');notify(data.sent>0?'테스트 알림을 '+data.sent+'개 기기에 전송했습니다.':'등록된 기기가 없습니다. 먼저 푸시 알림을 등록해 주세요.');}
+    catch(e:any){console.error('[NEXUS push test]',e);notify('테스트 알림 실패: '+(e?.message||'오류'));}
+    finally{setPushBusy(false);}
+  };
+  const disablePushNotifications=async()=>{
+    if(!supabase||pushBusy)return;setPushBusy(true);
+    try{const registration=await navigator.serviceWorker.ready;const subscription=await registration.pushManager.getSubscription();if(!subscription){setPushRegistered(false);notify('해제할 푸시 구독이 없습니다.');return;}
+      const {error}=await supabase.from('push_subscriptions').delete().eq('endpoint',subscription.endpoint);if(error)throw error;
+      await subscription.unsubscribe();setPushRegistered(false);notify('이 기기의 푸시 알림을 해제했습니다.');
+    }catch(e:any){console.error('[NEXUS push unsubscribe]',e);notify('푸시 해제 실패: '+(e?.message||'오류'));}
+    finally{setPushBusy(false);}
   };
   const startDirectCall=()=>{
     if(!supabase||!currentUser||!activeDm?.person?.id)return;
@@ -1087,9 +1116,10 @@ function WorkspaceApp() {
           <input ref={themeImageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" capture="environment" hidden onChange={e=>uploadProfileImage('theme',e.target.files?.[0])}/>
           {profile.theme_background_url&&<button className="secondary-action full-action" onClick={()=>setProfile(v=>({...v,theme_background_url:''}))}>배경 사진 제거</button>}
           <button className="primary-action full-action" disabled={profileBusy} onClick={saveProfile}>{profileBusy?'저장 중...':'프로필 및 테마 저장'}</button>
-          <button className="secondary-action full-action" onClick={async()=>{if(!('Notification' in window)){notify('이 브라우저는 알림을 지원하지 않습니다.');return;}const p=await Notification.requestPermission();notify(p==='granted'?'브라우저 알림이 허용되었습니다.':'알림 권한이 허용되지 않았습니다.')}}><Bell size={14}/> 브라우저 알림 허용</button>
-          <button className="secondary-action full-action" onClick={enablePushNotifications}><Bell size={14}/> DM·핑·통화 백그라운드 푸시 등록</button>
-          <div className="settings-note">브라우저 알림을 허용한 뒤 '백그라운드 시스템 푸시 등록'을 누르세요. 등록된 기기는 앱이 백그라운드에 있어도 DM, 핑, 통화 요청을 시스템 알림으로 받습니다. Android 설정에서 NEXUS 알림과 진동도 허용해야 합니다.</div>
+          <div className="settings-note push-status-card"><strong>시스템 푸시 상태</strong><span>권한: {pushPermission==='granted'?'허용됨':pushPermission==='denied'?'차단됨':pushPermission==='unsupported'?'지원 안 됨':'아직 선택 안 함'}</span><span>이 기기: {pushRegistered?'등록 완료':'등록되지 않음'}</span><small>등록하면 NEXUS가 백그라운드이거나 닫혀 있어도 지원되는 Android 브라우저에서 DM·멘션·핑·통화 알림을 받을 수 있습니다.</small></div>
+          <button className="secondary-action full-action" disabled={pushBusy} onClick={enablePushNotifications}><Bell size={14}/> {pushBusy?'처리 중...':pushRegistered?'푸시 알림 다시 연결':'푸시 알림 켜기'}</button>
+          <button className="secondary-action full-action" disabled={pushBusy||!pushRegistered} onClick={sendPushTest}><Bell size={14}/> 테스트 알림 보내기</button>
+          <button className="secondary-action full-action" disabled={pushBusy||!pushRegistered} onClick={disablePushNotifications}>이 기기 푸시 알림 해제</button>
           <button className="secondary-action full-action" disabled={logoutBusy} onClick={signOut}>{logoutBusy?'로그아웃 중...':'로그아웃'}</button>
         </div></div></div>}
     {notificationsOpen&&<div className="notification-pop"><div className="notification-title">알림<button onClick={()=>setNotificationsOpen(false)}><X size={15}/></button></div>{notifications.length?notifications.map(n=><button className={'notification-item '+(!n.read_at?'unread':'')} key={n.id} onClick={()=>{markNotificationRead(n.id);if(n.type==='call'){const code=(n.body.match(/초대 코드:\s*([A-Z0-9]{12,16})/i)||[])[1];if(code)setIncomingCallCode(code.toUpperCase());setSection('meetings');}else if(n.type==='ping'||n.type==='dm'){const conversation=dmConversations.find(c=>c.id===n.target_id);if(conversation)setActiveDm(conversation);setSection('dms');}if(n.type==='friend_request')setSection('community');if(n.type==='mention'){const name=Object.keys(channelIds).find(k=>channelIds[k]===n.target_id);if(name)setActiveChannel(name);if(n.source_id)setHighlightedMessageId(n.source_id);setSection('messages');}setNotificationsOpen(false)}}><strong>{n.title}</strong><span>{n.body}</span><small>{new Date(n.created_at).toLocaleString('ko-KR')}</small></button>):<div className="empty-state">새로운 알림이 없습니다.</div>}</div>}
