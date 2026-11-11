@@ -602,3 +602,48 @@ with check (user_id=(select auth.uid()) and exists (
 drop policy if exists message_reactions_delete_self on public.message_reactions;
 create policy message_reactions_delete_self on public.message_reactions for delete to authenticated
 using (user_id=(select auth.uid()));
+
+
+
+-- NEXUS active-session and aggregate usage telemetry. No message content or personal data is collected.
+create table if not exists public.app_sessions (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  session_id uuid not null,
+  created_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  primary key (user_id, session_id)
+);
+alter table public.app_sessions enable row level security;
+drop policy if exists app_sessions_select_self on public.app_sessions;
+create policy app_sessions_select_self on public.app_sessions for select to authenticated using (user_id=(select auth.uid()));
+drop policy if exists app_sessions_insert_self on public.app_sessions;
+create policy app_sessions_insert_self on public.app_sessions for insert to authenticated with check (user_id=(select auth.uid()));
+drop policy if exists app_sessions_update_self on public.app_sessions;
+create policy app_sessions_update_self on public.app_sessions for update to authenticated using (user_id=(select auth.uid())) with check (user_id=(select auth.uid()));
+
+create table if not exists public.app_usage_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_type text not null check (event_type in ('app_open','message_sent','dm_sent','call_started','file_uploaded')),
+  created_at timestamptz not null default now()
+);
+alter table public.app_usage_events enable row level security;
+drop policy if exists app_usage_events_select_self on public.app_usage_events;
+create policy app_usage_events_select_self on public.app_usage_events for select to authenticated using (user_id=(select auth.uid()));
+drop policy if exists app_usage_events_insert_self on public.app_usage_events;
+create policy app_usage_events_insert_self on public.app_usage_events for insert to authenticated with check (user_id=(select auth.uid()));
+
+create index if not exists app_sessions_last_seen_idx on public.app_sessions(last_seen_at desc);
+create index if not exists app_usage_events_created_idx on public.app_usage_events(created_at desc);
+create index if not exists app_usage_events_type_created_idx on public.app_usage_events(event_type,created_at desc);
+create index if not exists app_usage_events_user_created_idx on public.app_usage_events(user_id,created_at desc);
+
+-- Explicit deny policies document that these tables are accessible only to trusted server functions.
+drop policy if exists admin_audit_logs_server_only on public.admin_audit_logs;
+create policy admin_audit_logs_server_only on public.admin_audit_logs for all to anon,authenticated using(false) with check(false);
+drop policy if exists push_vapid_config_server_only on public.push_vapid_config;
+create policy push_vapid_config_server_only on public.push_vapid_config for all to anon,authenticated using(false) with check(false);
+drop policy if exists system_announcements_server_only on public.system_announcements;
+create policy system_announcements_server_only on public.system_announcements for all to anon,authenticated using(false) with check(false);
+drop policy if exists workspace_join_links_server_only on public.workspace_join_links;
+create policy workspace_join_links_server_only on public.workspace_join_links for all to anon,authenticated using(false) with check(false);
