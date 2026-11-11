@@ -647,3 +647,37 @@ drop policy if exists system_announcements_server_only on public.system_announce
 create policy system_announcements_server_only on public.system_announcements for all to anon,authenticated using(false) with check(false);
 drop policy if exists workspace_join_links_server_only on public.workspace_join_links;
 create policy workspace_join_links_server_only on public.workspace_join_links for all to anon,authenticated using(false) with check(false);
+
+
+
+-- Search acceleration and server-enforced daily AI request budget.
+create extension if not exists pg_trgm with schema extensions;
+create index if not exists messages_content_trgm_idx on public.messages using gin (content extensions.gin_trgm_ops);
+create index if not exists dm_messages_content_trgm_idx on public.dm_messages using gin (content extensions.gin_trgm_ops);
+create index if not exists profiles_display_name_trgm_idx on public.profiles using gin (display_name extensions.gin_trgm_ops);
+
+create table if not exists public.ai_request_usage (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  usage_day date not null,
+  request_count integer not null default 0 check (request_count >= 0),
+  primary key (user_id, usage_day)
+);
+alter table public.ai_request_usage enable row level security;
+drop policy if exists ai_request_usage_server_only on public.ai_request_usage;
+create policy ai_request_usage_server_only on public.ai_request_usage for all to anon,authenticated using(false) with check(false);
+
+create or replace function private.consume_ai_request_limit(p_user_id uuid,p_daily_limit integer default 60)
+returns table(allowed boolean,remaining integer,reset_at timestamptz)
+language plpgsql security definer set search_path = '' as $$
+declare v_count integer; v_limit integer:=greatest(1,least(coalesce(p_daily_limit,60),120)); v_day date:=(now() at time zone 'UTC')::date;
+begin
+  if p_user_id is null then return query select false,0,((v_day+1)::timestamp at time zone 'UTC'); return; end if;
+  insert into public.ai_request_usage(user_id,usage_day,request_count) values(p_user_id,v_day,1)
+  on conflict(user_id,usage_day) do update set request_count=public.ai_request_usage.request_count+1
+  where public.ai_request_usage.request_count<v_limit returning request_count into v_count;
+  if v_count is null then return query select false,0,((v_day+1)::timestamp at time zone 'UTC');
+  else return query select true,greatest(0,v_limit-v_count),((v_day+1)::timestamp at time zone 'UTC'); end if;
+end;
+$$;
+revoke all on function private.consume_ai_request_limit(uuid,integer) from public,anon,authenticated;
+grant execute on function private.consume_ai_request_limit(uuid,integer) to service_role;
