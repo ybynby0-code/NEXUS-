@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import CallRoom from './CallRoom';
-import AdminPanel from './AdminPanel';
-import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2, Languages } from 'lucide-react';
+const CallRoom = lazy(() => import('./CallRoom'));
+const AdminPanel = lazy(() => import('./AdminPanel'));
+import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2, Languages, Smartphone, RefreshCw, WifiOff } from 'lucide-react';
 
 type Section = 'home' | 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatReaction = { id:string; emoji:string; user_id:string };
@@ -94,9 +94,66 @@ function WorkspaceApp() {
   const [toast,setToast] = useState('');
   const [isFullscreen,setIsFullscreen] = useState(!!document.fullscreenElement);
   const [isStandalone,setIsStandalone] = useState(window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || (window.navigator as any).standalone===true);
+  const [networkOnline,setNetworkOnline] = useState(()=>navigator.onLine);
+  const [realtimeState,setRealtimeState] = useState<'connecting'|'connected'|'reconnecting'>('connecting');
+  const [installPrompt,setInstallPrompt] = useState<any>(null);
+  const [updateAvailable,setUpdateAvailable] = useState(false);
+  const [updatingApp,setUpdatingApp] = useState(false);
+  const updateRequested=useRef(false);
+  const sessionIdRef=useRef('');
   const fileInput=useRef<HTMLInputElement>(null);
 
-  const notify=(text:string)=>{setToast(text);window.setTimeout(()=>setToast(''),2600)};
+  const notify=(text:string)=>{setToast(text);window.setTimeout(()=>setToast(''),3200)};
+  const recordUsage=(eventType:'app_open'|'message_sent'|'dm_sent'|'call_started'|'file_uploaded')=>{
+    if(!supabase||!currentUser)return;
+    void supabase.from('app_usage_events').insert({user_id:currentUser.id,event_type:eventType}).then(({error})=>{if(error)console.warn('[NEXUS usage telemetry]',error);});
+  };
+  useEffect(()=>{
+    const onOnline=()=>{setNetworkOnline(true);supabase?.realtime.connect();};
+    const onOffline=()=>setNetworkOnline(false);
+    const onBeforeInstall=(event:any)=>{event.preventDefault();setInstallPrompt(event);};
+    const onInstalled=()=>{setInstallPrompt(null);setIsStandalone(true);notify('NEXUS 앱 설치가 완료되었습니다.');};
+    const onControllerChange=()=>{if(updateRequested.current)window.location.reload();};
+    window.addEventListener('online',onOnline);window.addEventListener('offline',onOffline);
+    window.addEventListener('beforeinstallprompt',onBeforeInstall as EventListener);window.addEventListener('appinstalled',onInstalled);
+    navigator.serviceWorker?.addEventListener('controllerchange',onControllerChange);
+    let registration:ServiceWorkerRegistration|undefined;
+    navigator.serviceWorker?.ready.then(reg=>{
+      registration=reg;if(reg.waiting)setUpdateAvailable(true);
+      reg.addEventListener('updatefound',()=>{
+        const worker=reg.installing;if(!worker)return;
+        worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)setUpdateAvailable(true);});
+      });
+      void reg.update().catch(()=>{});
+    }).catch(()=>{});
+    return()=>{window.removeEventListener('online',onOnline);window.removeEventListener('offline',onOffline);window.removeEventListener('beforeinstallprompt',onBeforeInstall as EventListener);window.removeEventListener('appinstalled',onInstalled);navigator.serviceWorker?.removeEventListener('controllerchange',onControllerChange);};
+  },[]);
+  useEffect(()=>{
+    if(!supabase||!currentUser)return;
+    let sessionId='';
+    try{sessionId=sessionStorage.getItem('nexus-session-id')||'';if(!sessionId){sessionId=crypto.randomUUID();sessionStorage.setItem('nexus-session-id',sessionId);}}catch{sessionId=crypto.randomUUID();}
+    sessionIdRef.current=sessionId;
+    try{if(!sessionStorage.getItem('nexus-app-open-recorded')){recordUsage('app_open');sessionStorage.setItem('nexus-app-open-recorded','1');}}catch{recordUsage('app_open');}
+    let active=true;
+    const heartbeat=async()=>{
+      if(!active||!navigator.onLine)return;
+      const {error}=await supabase.from('app_sessions').upsert({user_id:currentUser.id,session_id:sessionId,last_seen_at:new Date().toISOString()},{onConflict:'user_id,session_id'});
+      if(error)console.warn('[NEXUS session heartbeat]',error);
+    };
+    void heartbeat();const timer=window.setInterval(()=>void heartbeat(),90000);
+    const onVisible=()=>{if(document.visibilityState==='visible')void heartbeat();};document.addEventListener('visibilitychange',onVisible);
+    return()=>{active=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible);};
+  },[currentUser?.id]);
+  const installNexusApp=async()=>{
+    if(isStandalone){notify('NEXUS가 앱 모드로 실행 중입니다.');return;}
+    if(!installPrompt){notify('Samsung Internet 메뉴(≡)에서 현재 페이지 추가 → 홈 화면을 선택하면 앱처럼 설치할 수 있습니다.');return;}
+    try{await installPrompt.prompt();await installPrompt.userChoice;setInstallPrompt(null);}catch(e:any){notify('앱 설치 창을 열지 못했습니다: '+(e?.message||'오류'));}
+  };
+  const applyAppUpdate=async()=>{
+    const registration=await navigator.serviceWorker?.getRegistration('./');
+    if(registration?.waiting){updateRequested.current=true;setUpdatingApp(true);registration.waiting.postMessage({type:'NEXUS_SKIP_WAITING'});return;}
+    notify('적용할 새 업데이트가 없습니다.');setUpdateAvailable(false);
+  };
   useEffect(()=>{
     const sync=()=>setIsFullscreen(!!document.fullscreenElement);
     const standalone=()=>setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || (window.navigator as any).standalone===true);
@@ -211,8 +268,9 @@ function WorkspaceApp() {
     presence.on('presence',{event:'sync'},()=>setOnlineCount(Object.keys(presence.presenceState()).length));
     presence.subscribe(async(status:string)=>{
       if(status==='SUBSCRIBED'){
+        setRealtimeState('connected');
         await presence.track({user_id:currentUser.id,name:currentUser.name,online_at:new Date().toISOString()});
-      }
+      }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED')setRealtimeState('reconnecting');
     });
     return()=>{setOnlineCount(0);void supabase.removeChannel(presence);};
   },[currentUser?.id,workspaceId]);
@@ -286,6 +344,7 @@ function WorkspaceApp() {
     setDmDraft('');
     const {data,error}=await supabase.from('dm_messages').insert({conversation_id:activeDm.id,sender_id:currentUser.id,content}).select('id,sender_id,content,created_at,read_at').single();
     if(error){setDmDraft(content);notify('DM 전송 실패: '+error.message);return;}
+    recordUsage('dm_sent');
     if(data){
       setDmMessages(v=>v.some(m=>m.id===data.id)?v:[...v,data]);
       const recipientId=activeDm.member_one===currentUser.id?activeDm.member_two:activeDm.member_one;
@@ -377,6 +436,7 @@ function WorkspaceApp() {
     setPendingOutgoingCall(null);
     const {error}=await supabase.from('notifications').insert({recipient_id:pending.recipient,actor_id:currentUser.id,type:'call',title:pending.title,body:pending.body,target_id:pending.conversationId});
     if(error){notify('통화방은 열렸지만 초대 알림 전송에 실패했습니다: '+error.message);return;}
+    recordUsage('call_started');
     try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'call',recipient_id:pending.recipient,title:pending.title,body:pending.body,conversation_id:pending.conversationId,url:'./?section=meetings&call='+pending.code}});if(pushError)console.warn('[NEXUS call push]',pushError);}catch(e){console.warn('[NEXUS call push]',e);}
     notify('통화 요청을 보냈습니다. 상대방이 받으면 연결됩니다.');
   };
@@ -545,6 +605,7 @@ function WorkspaceApp() {
     }
     const {data,error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content,parent_message_id:replyTo?.id||null}).select('id,content,created_at,author_id,parent_message_id').single();
     if(error){notify('전송 실패: '+error.message);return;}
+    recordUsage('message_sent');
     setMessage('');setReplyTo(null);setMentionQuery(null);
     if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,name:'나',initials:'나',color:'orange',time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id,parent_message_id:data.parent_message_id,reactions:[]}]);
     // Autocomplete selection is authoritative; also resolve manually typed exact @nicknames.
@@ -801,6 +862,7 @@ function WorkspaceApp() {
       if(uploaded.error){notify(file.name+' 업로드 실패: '+uploaded.error.message);continue;}
       const saved=await supabase.from('workspace_files').insert({workspace_id:workspaceId,uploaded_by:currentUser.id,file_name:file.name,storage_path:path,mime_type:file.type||'application/octet-stream',size_bytes:file.size});
       if(saved.error){await supabase.storage.from('nexus-files').remove([path]);notify(file.name+' 정보 저장 실패: '+saved.error.message);}
+      else recordUsage('file_uploaded');
     }
     await loadWorkspaceFiles();
     setFilesBusy(false);
@@ -865,8 +927,9 @@ function WorkspaceApp() {
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobilePanel(mobilePanel==='nav'?'none':'nav')} aria-label="메뉴"><Command size={19}/></button>
         <div className="breadcrumbs"><span>NEXUS</span><span className="slash">/</span><strong>{section==='home'?'홈':section==='messages'?'#'+activeChannel:section==='dms'?'개인 메시지':section==='community'?'친구 및 멤버':section==='meetings'?'음성·영상 통화':section==='admin'?'관리자 센터':'파일 보관함'}</strong></div>
-        <div className="top-actions"><button className="icon-button fullscreen-toggle" aria-label={isFullscreen?"전체화면 종료":isStandalone?"앱 전체화면 실행 중":"전체화면"} title={isStandalone?"앱 전체화면 실행 중":isFullscreen?"전체화면 종료":"전체화면"} onClick={toggleFullscreen}><span className="fullscreen-icon">{isFullscreen||isStandalone?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</span></button><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
+        <div className="top-actions">{!isStandalone&&<button className="icon-button install-app-button" onClick={installNexusApp} aria-label="NEXUS 앱 설치" title="NEXUS 앱 설치"><Smartphone size={17}/></button>}{updateAvailable&&<button className="icon-button app-update-button" onClick={applyAppUpdate} disabled={updatingApp} aria-label="앱 업데이트" title="새 버전 업데이트"> <RefreshCw size={17}/></button>}<button className="icon-button fullscreen-toggle" aria-label={isFullscreen?"전체화면 종료":isStandalone?"앱 전체화면 실행 중":"전체화면"} title={isStandalone?"앱 전체화면 실행 중":isFullscreen?"전체화면 종료":"전체화면"} onClick={toggleFullscreen}><span className="fullscreen-icon">{isFullscreen||isStandalone?<Minimize2 size={17}/>:<Maximize2 size={17}/>}</span></button><button className="global-search" onClick={()=>setSearchOpen(true)}><Search size={16}/><span>무엇이든 검색하세요</span><kbd>Ctrl K</kbd></button><button className="icon-button" aria-label="알림" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/></button><button className="icon-button" aria-label="설정" onClick={()=>setSettingsOpen(true)}><Settings size={18}/></button></div>
       </header>
+      {(!networkOnline||realtimeState==='reconnecting')&&<div className="connection-banner"><WifiOff size={15}/><span>{!networkOnline?'인터넷 연결이 끊겼습니다. 연결이 복구되면 실시간 기능을 다시 연결합니다.':'실시간 서버 연결이 불안정합니다. 메시지와 알림 동기화를 다시 시도해 주세요.'}</span><button onClick={()=>{supabase?.realtime.connect();window.location.reload();}}>다시 연결</button></div>}
 
       {section==='home'?<section className="feature-page home-page">
         <div className="home-welcome"><div><div className="eyebrow">NEXUS WORKSPACE</div><h1>안녕하세요, {profile.display_name||currentUser?.name||'사용자'}님</h1><p>오늘 필요한 대화와 협업 도구를 한곳에서 시작하세요.</p></div><div className="home-status"><i/>{dbReady?'모든 서비스 연결됨':'서비스 연결 확인 중'}</div></div>
@@ -881,7 +944,7 @@ function WorkspaceApp() {
           <button className="home-action-card" onClick={()=>{setSettingsOpen(true)}}><span className="home-action-icon pink"><Settings size={21}/></span><strong>내 공간 꾸미기</strong><small>프로필과 테마를 원하는 대로 설정하세요.</small><b>열기 <span>→</span></b></button>
         </div>
         <div className="home-bottom-grid"><div className="section-card"><div className="card-title"><Hash size={18}/>내 채널 <span>{channels.length}개</span></div>{channels.slice(0,6).map(ch=><button className="home-channel-row" key={ch} onClick={()=>{setActiveChannel(ch);setSection('messages')}}><Hash size={15}/><span>{ch}</span><b>열기 →</b></button>)}</div><div className="section-card"><div className="card-title"><CircleHelp size={18}/>처음 사용하시나요?</div><p className="home-help-copy">① 채널을 열어 인사를 남겨보세요.<br/>② 친구 및 멤버 메뉴에서 사람을 찾아보세요.<br/>③ 통화나 파일 공유로 협업을 시작할 수 있습니다.</p><button className="secondary-action" onClick={()=>setSection('community')}>친구 및 멤버 보기</button></div></div>
-      </section>:section==='admin'&&adminRole?<AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify}/>:section==='messages'?<div className="content-grid">
+      </section>:section==='admin'&&adminRole?<Suspense fallback={<div className="section-card">관리자 센터를 불러오는 중...</div>}><AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify} onlineCount={onlineCount}/></Suspense>:section==='messages'?<div className="content-grid">
         <section className="chat-panel">
           <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className={'icon-button auto-translate-toggle '+(autoTranslateMessages?'active':'')} onClick={()=>setAutoTranslateMessages(v=>!v)} aria-label={autoTranslateMessages?'자동 번역 끄기':'자동 번역 켜기'} aria-pressed={autoTranslateMessages} title={autoTranslateMessages?'새 메시지 자동 번역 켜짐':'새 메시지 자동 번역 꺼짐'}><Languages size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
@@ -955,7 +1018,7 @@ function WorkspaceApp() {
         </div>
             </section>:section==='meetings'?<section className="feature-page">
         <div className="feature-heading"><div><div className="eyebrow">VOICE & VIDEO</div><h1>회의 및 통화</h1><p>초대 코드로 연결하는 실시간 1:1 음성·화상 통화입니다.</p></div></div>
-        {currentUser&&<CallRoom supabase={supabase} userId={currentUser.id} displayName={profile.display_name||currentUser.name} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')} onOutgoingReady={handleOutgoingCallReady}/>}
+        {currentUser&&<Suspense fallback={<div className="section-card">통화 모듈을 불러오는 중...</div>}><CallRoom supabase={supabase} userId={currentUser.id} displayName={profile.display_name||currentUser.name} initialCreateCode={outgoingCallCode} initialJoinCode={incomingCallCode} onInitialCreateHandled={()=>setOutgoingCallCode('')} onInitialJoinHandled={()=>setIncomingCallCode('')} onOutgoingReady={handleOutgoingCallReady}/></Suspense>}
         <div className="section-card schedule-card">
           <div className="card-title"><CalendarDays size={18}/>회의 예약</div>
           <div className="schedule-form"><input value={meetingTitle} onChange={e=>setMeetingTitle(e.target.value)} maxLength={120} placeholder="회의 제목"/><input type="datetime-local" value={meetingTime} onChange={e=>setMeetingTime(e.target.value)}/><button className="primary-action" onClick={scheduleMeeting} disabled={meetingBusy||!dbReady}>{meetingBusy?'저장 중...':'일정 추가'}</button></div>
