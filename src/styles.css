@@ -1377,3 +1377,19 @@ body::before{
 .avatar.decoration-pulse{border:2px solid var(--user-accent,#7867e8);animation:nexus-border-pulse 1.8s ease-in-out infinite}
 .avatar.decoration-plasma{border:2px solid #00e5ff;animation:nexus-border-plasma 4s linear infinite}
 @media(prefers-reduced-motion:reduce){.avatar.decoration-aurora,.avatar.decoration-rainbow,.avatar.decoration-pulse,.avatar.decoration-plasma{animation:none}}
+
+
+/* Additional animated profile frame collection */
+@keyframes nexus-fire-frame{0%,100%{border-color:#ffb02e;box-shadow:0 0 8px #ff6a00,0 0 18px #ff3d0088}50%{border-color:#ff3158;box-shadow:0 0 12px #ff3158,0 0 26px #ff6a0088}}
+@keyframes nexus-ice-frame{0%,100%{border-color:#b9f4ff;box-shadow:0 0 8px #54dfff,0 0 18px #54dfff88}50%{border-color:#fff;box-shadow:0 0 12px #fff,0 0 28px #4aaeffaa}}
+@keyframes nexus-galaxy-frame{0%{border-color:#b68cff;box-shadow:0 0 8px #9b5cff,0 0 20px #5829a888;filter:hue-rotate(0deg)}50%{border-color:#5de1ff;box-shadow:0 0 12px #5de1ff,0 0 28px #8b5cffaa;filter:hue-rotate(90deg)}100%{border-color:#b68cff;box-shadow:0 0 8px #9b5cff,0 0 20px #5829a888;filter:hue-rotate(0deg)}}
+@keyframes nexus-electric-frame{0%,100%{box-shadow:0 0 5px #3cefff,0 0 12px #3cefff88}25%{box-shadow:0 0 14px #3cefff,0 0 25px #3cefffaa}27%{box-shadow:0 0 2px #3cefff}30%{box-shadow:0 0 12px #3cefff,0 0 22px #3cefff99}70%{box-shadow:0 0 7px #3cefff,0 0 18px #3cefff88}}
+@keyframes nexus-emerald-frame{0%,100%{border-color:#4dffb2;box-shadow:0 0 8px #00c982,0 0 18px #00c98288}50%{border-color:#c2ffe4;box-shadow:0 0 13px #4dffb2,0 0 28px #00c982aa}}
+@keyframes nexus-glitch-frame{0%,88%,100%{border-color:#ff4ee8;box-shadow:3px 0 #00eaff,-3px 0 #ff4ee8,0 0 14px #ff4ee888}90%{border-color:#00eaff;box-shadow:-3px 0 #ff4ee8,3px 0 #00eaff,0 0 20px #00eaff}93%{border-color:#fff;box-shadow:0 0 5px #fff}96%{border-color:#ff4ee8;box-shadow:2px 0 #00eaff,-2px 0 #ff4ee8}}
+.avatar.decoration-fire{border:2px solid #ff8a24;animation:nexus-fire-frame 1.7s ease-in-out infinite}
+.avatar.decoration-ice{border:2px solid #b9f4ff;animation:nexus-ice-frame 2.6s ease-in-out infinite}
+.avatar.decoration-galaxy{border:2px solid #b68cff;animation:nexus-galaxy-frame 6s linear infinite}
+.avatar.decoration-electric{border:2px solid #3cefff;animation:nexus-electric-frame 2.2s steps(1,end) infinite}
+.avatar.decoration-emerald{border:2px solid #4dffb2;animation:nexus-emerald-frame 2.4s ease-in-out infinite}
+.avatar.decoration-glitch{border:2px solid #ff4ee8;animation:nexus-glitch-frame 3s steps(1,end) infinite}
+@media(prefers-reduced-motion:reduce){.avatar.decoration-fire,.avatar.decoration-ice,.avatar.decoration-galaxy,.avatar.decoration-electric,.avatar.decoration-emerald,.avatar.decoration-glitch{animation:none}}
