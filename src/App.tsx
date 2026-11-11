@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 const CallRoom = lazy(() => import('./CallRoom'));
 const AdminPanel = lazy(() => import('./AdminPanel'));
-import { Activity, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2, Languages, Smartphone, RefreshCw, WifiOff } from 'lucide-react';
+import { Activity, Pin, Bell, Bot, CalendarDays, Check, ChevronDown, CircleHelp, Command, Compass, Copy, FileText, Hash, Headphones, LayoutGrid, MessageCircle, Mic, MoreHorizontal, Paperclip, Phone, Plus, Search, Send, Settings, ShieldCheck, Sparkles, Users, Video, X, Upload, UserPlus, FolderOpen, Link2, Maximize2, Minimize2, Languages, Smartphone, RefreshCw, WifiOff } from 'lucide-react';
 
 type Section = 'home' | 'messages' | 'dms' | 'community' | 'meetings' | 'files' | 'admin';
 type ChatReaction = { id:string; emoji:string; user_id:string };
@@ -63,6 +63,9 @@ function WorkspaceApp() {
   const [searchQuery,setSearchQuery] = useState('');
   const [searchResults,setSearchResults] = useState<any[]>([]);
   const [searchBusy,setSearchBusy] = useState(false);
+  const [pinnedPanelOpen,setPinnedPanelOpen] = useState(false);
+  const [pinnedMessages,setPinnedMessages] = useState<any[]>([]);
+  const [pinnedBusy,setPinnedBusy] = useState(false);
   const [settingsOpen,setSettingsOpen] = useState(false);
   const [notificationsOpen,setNotificationsOpen] = useState(false);
   const [channelDialog,setChannelDialog] = useState(false);
@@ -641,6 +644,32 @@ function WorkspaceApp() {
     setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
     for(const target of recipients){const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';const body=content.length>140?content.slice(0,137)+'...':content;const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId,source_id:data?.id});if(noticeError){console.warn('[NEXUS mention notification]',noticeError);continue;}try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'mention',recipient_id:target.user_id,title,body,conversation_id:channelId,resource_id:data?.id,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)+'&message='+encodeURIComponent(data?.id||'')}});if(pushError)console.warn('[NEXUS mention push]',pushError);}catch(e){console.warn('[NEXUS mention push]',e);}}
   };
+  const openPinnedMessages=async()=>{
+    if(!supabase||!channelIds[activeChannel])return;
+    setPinnedPanelOpen(true);setPinnedBusy(true);
+    try{
+      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id,pinned_at').eq('channel_id',channelIds[activeChannel]).not('pinned_at','is',null).order('pinned_at',{ascending:false}).limit(100);
+      if(error)throw error;
+      const ids=[...new Set((data||[]).map((m:any)=>m.author_id))];
+      const {data:people,error:peopleError}=ids.length?await supabase.from('profiles').select('id,display_name').in('id',ids):{data:[],error:null};
+      if(peopleError)throw peopleError;
+      const names:Record<string,string>={};(people||[]).forEach((p:any)=>names[p.id]=p.display_name||'사용자');
+      setPinnedMessages((data||[]).map((m:any)=>({...m,author:names[m.author_id]||'사용자'})));
+    }catch(e:any){notify('고정 메시지 조회 실패: '+(e?.message||'오류'));setPinnedMessages([]);}
+    finally{setPinnedBusy(false);}
+  };
+  const jumpToPinnedMessage=async(item:any)=>{
+    let target=messages.find(m=>m.id===item.id);
+    if(!target&&supabase){
+      const {data,error}=await supabase.from('messages').select('id,content,created_at,author_id,parent_message_id,pinned_at,edited_at').eq('id',item.id).maybeSingle();
+      if(error||!data){notify('메시지를 불러오지 못했습니다.');return;}
+      const {data:person}=await supabase.from('profiles').select('display_name,theme_settings').eq('id',data.author_id).maybeSingle();
+      target={id:data.id,name:data.author_id===currentUser?.id?'나':person?.display_name||'사용자',initials:(person?.display_name||'U').slice(0,1),color:data.author_id===currentUser?.id?'orange':'blue',nameColor:person?.theme_settings?.name_color||undefined,time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id,parent_message_id:data.parent_message_id,pinned_at:data.pinned_at,edited_at:data.edited_at,reactions:[]};
+      setMessages(v=>[...v.filter(x=>x.id!==data.id),target!].sort((a,b)=>new Date('1970-01-01T'+a.time).getTime()-new Date('1970-01-01T'+b.time).getTime()));
+    }
+    setPinnedPanelOpen(false);setHighlightedMessageId(item.id);
+    window.setTimeout(()=>document.querySelector<HTMLElement>('[data-message-id="'+CSS.escape(item.id)+'"]')?.scrollIntoView({behavior:'smooth',block:'center'}),120);
+  };
   const toggleMessageReaction=async(m:ChatMessage,emoji:string)=>{
     if(!supabase||!currentUser)return;const existing=(m.reactions||[]).find(x=>x.user_id===currentUser.id&&x.emoji===emoji);
     if(existing){const {error}=await supabase.from('message_reactions').delete().eq('id',existing.id);if(error){notify('반응 취소 실패: '+error.message);return;}setMessages(v=>v.map(x=>x.id===m.id?{...x,reactions:(x.reactions||[]).filter(r=>r.id!==existing.id)}:x));}
@@ -954,7 +983,7 @@ function WorkspaceApp() {
         <div className="home-bottom-grid"><div className="section-card"><div className="card-title"><Hash size={18}/>내 채널 <span>{channels.length}개</span></div>{channels.slice(0,6).map(ch=><button className="home-channel-row" key={ch} onClick={()=>{setActiveChannel(ch);setSection('messages')}}><Hash size={15}/><span>{ch}</span><b>열기 →</b></button>)}</div><div className="section-card"><div className="card-title"><CircleHelp size={18}/>처음 사용하시나요?</div><p className="home-help-copy">① 채널을 열어 인사를 남겨보세요.<br/>② 친구 및 멤버 메뉴에서 사람을 찾아보세요.<br/>③ 통화나 파일 공유로 협업을 시작할 수 있습니다.</p><button className="secondary-action" onClick={()=>setSection('community')}>친구 및 멤버 보기</button></div></div>
       </section>:section==='admin'&&adminRole?<Suspense fallback={<div className="section-card">관리자 센터를 불러오는 중...</div>}><AdminPanel supabase={supabase} userId={currentUser?.id||''} role={adminRole} notify={notify} onlineCount={onlineCount}/></Suspense>:section==='messages'?<div className="content-grid">
         <section className="chat-panel">
-          <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className={'icon-button auto-translate-toggle '+(autoTranslateMessages?'active':'')} onClick={()=>setAutoTranslateMessages(v=>!v)} aria-label={autoTranslateMessages?'자동 번역 끄기':'자동 번역 켜기'} aria-pressed={autoTranslateMessages} title={autoTranslateMessages?'새 메시지 자동 번역 켜짐':'새 메시지 자동 번역 꺼짐'}><Languages size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
+          <div className="panel-heading"><div><div className="eyebrow">CHANNEL</div><h1><Hash size={22}/>{activeChannel}</h1><p>팀의 대화와 아이디어를 나누는 공간입니다.</p></div><div className="heading-actions"><button className="icon-button" onClick={()=>setSection('community')} aria-label="멤버"><Users size={17}/></button><button className="icon-button" onClick={openPinnedMessages} aria-label="고정 메시지 보기" title="고정 메시지"><Pin size={17}/></button><button className="icon-button" onClick={()=>setSearchOpen(true)} aria-label="검색"><Search size={17}/></button><button className={'icon-button auto-translate-toggle '+(autoTranslateMessages?'active':'')} onClick={()=>setAutoTranslateMessages(v=>!v)} aria-label={autoTranslateMessages?'자동 번역 끄기':'자동 번역 켜기'} aria-pressed={autoTranslateMessages} title={autoTranslateMessages?'새 메시지 자동 번역 켜짐':'새 메시지 자동 번역 꺼짐'}><Languages size={17}/></button><button className="icon-button" onClick={()=>setChannelDialog(true)} aria-label="채널 추가"><Plus size={18}/></button></div></div>
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
             {messages.map(m=><article data-message-id={m.id} className={`message-row ${m.pinned_at?'message-pinned':''} ${highlightedMessageId===m.id?'message-mention-target':''}`} key={m.id}><div className={`avatar ${m.color}`}>{m.initials}</div><div className="message-body"><div className="message-meta"><strong style={{color:m.author_id===currentUser?.id?(themeSettings.name_color||"#d9d5ff"):(m.nameColor||undefined)}}>{m.name}</strong><time>{m.time}</time>{m.edited_at&&<small className="message-edited">수정됨</small>}{m.pinned_at&&<span className="message-pin-label">📌 고정됨</span>}{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.parent_message_id&&<button type="button" className="message-reply-ref" onClick={()=>{const parent=messages.find(x=>x.id===m.parent_message_id);if(parent){setHighlightedMessageId(parent.id);document.querySelector<HTMLElement>('[data-message-id="'+CSS.escape(parent.id)+'"]')?.scrollIntoView({behavior:'smooth',block:'center'});}else notify('원본 메시지가 최근 메시지 목록에 없습니다. 전체 검색으로 찾아보세요.')}}>↳ {messages.find(x=>x.id===m.parent_message_id)?.name||'이전 메시지'}에게 답장 · 원본 보기</button>}{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim().split(/(@[^\s@]+)/g).map((part,i)=>part.startsWith('@')?<strong className="message-mention" key={i}>{part}</strong>:part)}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}{translatedMessages[m.id]&&<div className="message-translation"><div><Languages size={12}/> 한국어 번역</div><p>{translatedMessages[m.id]}</p></div>}<div className="message-actions"><button onClick={()=>translateMessage(m)} disabled={translatingMessageIds.includes(m.id)}>{translatingMessageIds.includes(m.id)?'번역 중...':translatedMessages[m.id]?'번역 숨기기':'한국어 번역'}</button><button onClick={()=>{setReplyTo(m);setEditingMessageId(null);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>답장</button>{['👍','❤️','😂','🎉'].map(emoji=><button className={(m.reactions||[]).some(x=>x.user_id===currentUser?.id&&x.emoji===emoji)?'reaction-active':''} key={emoji} onClick={()=>toggleMessageReaction(m,emoji)}>{emoji} {(m.reactions||[]).filter(x=>x.emoji===emoji).length||''}</button>)}{m.author_id===currentUser?.id&&<button onClick={()=>togglePinMessage(m)}>{m.pinned_at?'고정 해제':'고정'}</button>}{m.author_id===currentUser?.id&&<><button onClick={()=>{setEditingMessageId(m.id);setReplyTo(null);setMessage(m.text);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>수정</button><button className="message-delete" onClick={()=>deleteMessage(m)}>삭제</button></>}</div></div></article>)}
