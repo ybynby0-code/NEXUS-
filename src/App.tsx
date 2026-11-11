@@ -328,7 +328,7 @@ function WorkspaceApp() {
     setDmConversations(rows.map((c:any)=>({...c,person:byId[c.member_one===currentUser.id?c.member_two:c.member_one]})));
   };
   useEffect(()=>{if(section==='dms'&&currentUser)loadDmConversations();},[section,currentUser?.id]);
-  useEffect(()=>{const params=new URLSearchParams(window.location.search);const call=params.get('call');if(call&&/^[A-Z0-9]{12,16}$/i.test(call)){setIncomingCallCode(call.toUpperCase());setSection('meetings');window.history.replaceState({},'',window.location.pathname);}else if(params.get('section')==='dms')setSection('dms');},[]);
+  useEffect(()=>{const params=new URLSearchParams(window.location.search);const call=params.get('call');const requested=params.get('section');if(call&&/^[A-Z0-9]{12,16}$/i.test(call)){setIncomingCallCode(call.toUpperCase());setSection('meetings');window.history.replaceState({},'',window.location.pathname);}else if(['home','messages','dms','community','meetings','files'].includes(requested||''))setSection(requested as Section);},[]);
   useEffect(()=>{const params=new URLSearchParams(window.location.search);const id=params.get('conversation');const channel=params.get('channel');if(channel&&Object.values(channelIds).includes(channel)){const name=Object.keys(channelIds).find(k=>channelIds[k]===channel);if(name){setActiveChannel(name);setSection('messages');window.history.replaceState({},'',window.location.pathname);}}if(!id||!dmConversations.length)return;const match=dmConversations.find(c=>c.id===id);if(match){setActiveDm(match);setSection('dms');window.history.replaceState({},'',window.location.pathname);}},[dmConversations,channelIds]);
 
   const openDm=async(person:any)=>{
