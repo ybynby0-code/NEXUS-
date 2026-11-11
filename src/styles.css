@@ -1393,3 +1393,9 @@ body::before{
 .avatar.decoration-emerald{border:2px solid #4dffb2;animation:nexus-emerald-frame 2.4s ease-in-out infinite}
 .avatar.decoration-glitch{border:2px solid #ff4ee8;animation:nexus-glitch-frame 3s steps(1,end) infinite}
 @media(prefers-reduced-motion:reduce){.avatar.decoration-fire,.avatar.decoration-ice,.avatar.decoration-galaxy,.avatar.decoration-electric,.avatar.decoration-emerald,.avatar.decoration-glitch{animation:none}}
+
+
+/* Scroll-to-message highlight for mention notifications */
+@keyframes nexus-mention-highlight{0%,100%{background-color:transparent;box-shadow:0 0 0 0 transparent}20%,70%{background-color:rgba(121,104,255,.18);box-shadow:0 0 0 1px rgba(151,137,255,.55),0 0 24px rgba(121,104,255,.2)}}
+.message-row.message-mention-target{border-radius:14px;animation:nexus-mention-highlight 2.2s ease-in-out 2}
+@media(prefers-reduced-motion:reduce){.message-row.message-mention-target{animation:none;background:rgba(121,104,255,.16);outline:1px solid rgba(151,137,255,.55)}}
