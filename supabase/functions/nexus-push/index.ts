@@ -61,6 +61,29 @@ Deno.serve(async (req: Request) => {
       const keys = await getOrCreateVapid(admin);
       return json({ ok: true, public_key: keys.public_key });
     }
+    if (input.action === "test") {
+      const keys = await getOrCreateVapid(admin);
+      if (!keys?.public_key || !keys?.private_key) throw new Error("VAPID 키 설정이 완전하지 않습니다.");
+      webpush.setVapidDetails("mailto:noreply@nexus.app", keys.public_key, keys.private_key);
+      const { data: devices, error: deviceError } = await admin.from("push_subscriptions")
+        .select("id,endpoint,p256dh,auth").eq("user_id", user.id);
+      if (deviceError) throw deviceError;
+      let sent = 0;
+      const stale: string[] = [];
+      const payload = JSON.stringify({ title: "NEXUS 테스트 알림", body: "백그라운드 푸시 알림이 정상적으로 연결되었습니다.", tag: "nexus-push-test-" + Date.now(), url: "/NEXUS-/?section=home", vibrate: [180, 90, 180] });
+      for (const device of devices || []) {
+        try {
+          await webpush.sendNotification({ endpoint: device.endpoint, keys: { p256dh: device.p256dh, auth: device.auth } }, payload);
+          sent++;
+        } catch (error) {
+          const status = (error as { statusCode?: number }).statusCode;
+          if (status === 404 || status === 410) stale.push(device.id);
+          else console.error("[NEXUS push test delivery]", error);
+        }
+      }
+      if (stale.length) await admin.from("push_subscriptions").delete().in("id", stale);
+      return json({ ok: true, sent, kind: "test" });
+    }
 
     const kind = String(input.kind || "dm");
     const recipientId = String(input.recipient_id || "");
