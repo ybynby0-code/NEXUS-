@@ -132,10 +132,18 @@ Deno.serve(async (req: Request) => {
     } else {
       if (!conversationId) return json({ ok: false, error: "대화 정보가 누락되었습니다." }, 400);
       const { data: conversation, error } = await admin.from("dm_conversations")
-        .select("id,member_one,member_two").eq("id", conversationId).maybeSingle();
+        .select("id,member_one,member_two,is_group").eq("id", conversationId).maybeSingle();
       if (error) throw error;
-      if (!conversation ||
-        ![conversation.member_one, conversation.member_two].includes(user.id) ||
+      if (!conversation) return json({ ok: false, error: "대화를 찾을 수 없습니다." }, 403);
+      if (conversation.is_group) {
+        const { data: members, error: memberError } = await admin.from("dm_conversation_members")
+          .select("user_id").eq("conversation_id", conversationId).in("user_id", [user.id, recipientId]);
+        if (memberError) throw memberError;
+        const memberIds = new Set((members || []).map((row: any) => row.user_id));
+        if (!memberIds.has(user.id) || !memberIds.has(recipientId)) {
+          return json({ ok: false, error: "그룹 대화 참여자에게만 알림을 보낼 수 있습니다." }, 403);
+        }
+      } else if (![conversation.member_one, conversation.member_two].includes(user.id) ||
         ![conversation.member_one, conversation.member_two].includes(recipientId)) {
         return json({ ok: false, error: "이 대화의 참여자에게만 알림을 보낼 수 있습니다." }, 403);
       }
