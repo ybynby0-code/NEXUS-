@@ -831,7 +831,7 @@ function WorkspaceApp() {
     if(!activeChannelRow||!supabase)return;setChannelSettingsOpen(true);setPermissionBusy(true);
     const {data,error}=await supabase.from('channel_permission_overwrites').select('id,channel_id,target_type,target_id,allow_permissions,deny_permissions').eq('channel_id',activeChannelRow.id);
     setPermissionBusy(false);if(error){notify('채널 권한을 불러오지 못했습니다: '+error.message);return;}
-    setPermissionOverwrites(data||[]);selectPermissionTarget('everyone');
+    setPermissionOverwrites(data||[]);setPermissionTargetType('everyone');setPermissionTargetId('');const everyoneRow=(data||[]).find((item:any)=>item.target_type==='everyone');const draft:Record<string,'allow'|'deny'|'inherit'>={};channelPermissionOptions.forEach(option=>{draft[option.key]=everyoneRow?.allow_permissions?.[option.key]===true?'allow':everyoneRow?.deny_permissions?.[option.key]===true?'deny':'inherit';});setPermissionDraft(draft);
   };
   const selectPermissionTarget=(type:'everyone'|'role'|'member',id='')=>{
     setPermissionTargetType(type);setPermissionTargetId(id);
