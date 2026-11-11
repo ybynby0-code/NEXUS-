@@ -32,6 +32,16 @@ Deno.serve(async (req: Request) => {
     });
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) return json({ ok: false, error: "로그인 세션을 확인할 수 없습니다." }, 401);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return json({ ok: false, error: "AI 사용량 보호 설정이 없습니다." }, 503);
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: quotaData, error: quotaError } = await adminClient.rpc("consume_ai_request_limit", { p_user_id: user.id, p_daily_limit: 60 });
+    if (quotaError) {
+      console.error("[NEXUS AI rate limit]", quotaError);
+      return json({ ok: false, error: "AI 사용량 확인에 실패했습니다. 잠시 후 다시 시도해 주세요." }, 503);
+    }
+    const quota = Array.isArray(quotaData) ? quotaData[0] : quotaData;
+    if (!quota?.allowed) return json({ ok: false, code: "AI_DAILY_LIMIT", error: "오늘의 AI 사용 한도(60회)를 모두 사용했습니다. 다음 날 다시 이용해 주세요.", reset_at: quota?.reset_at }, 429);
 
     const body = await req.json();
     const prompt = String(body?.prompt || "").trim();
