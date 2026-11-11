@@ -44,14 +44,31 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "overview") {
-      const [users, workspaces, messages, files, invites] = await Promise.all([
+      const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const since5m = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const [users, workspaces, messages, files, invites, sessions, recentEvents] = await Promise.all([
         admin.auth.admin.listUsers({ page: 1, perPage: 1 }),
         admin.from("workspaces").select("id", { count: "exact", head: true }),
         admin.from("messages").select("id", { count: "exact", head: true }),
         admin.from("workspace_files").select("id", { count: "exact", head: true }),
         admin.from("workspace_invites").select("id", { count: "exact", head: true }),
+        admin.from("app_sessions").select("user_id").gte("last_seen_at", since5m).limit(10000),
+        admin.from("app_usage_events").select("user_id,event_type").gte("created_at", since24h).limit(10000),
       ]);
-      return reply(200, { ok: true, role, stats: { users: users.data?.total ?? null, workspaces: workspaces.count, messages: messages.count, files: files.count, invites: invites.count } });
+      if (sessions.error) throw sessions.error;
+      if (recentEvents.error) throw recentEvents.error;
+      const activeSessionRows = sessions.data || [];
+      const eventRows = recentEvents.data || [];
+      const uniqueUsers = (rows: any[]) => new Set(rows.map((row: any) => row.user_id)).size;
+      const countEvents = (type: string) => eventRows.filter((row: any) => row.event_type === type).length;
+      return reply(200, { ok: true, role, stats: {
+        users: users.data?.total ?? null, workspaces: workspaces.count, messages: messages.count,
+        files: files.count, invites: invites.count,
+        active_sessions: activeSessionRows.length, active_users_now: uniqueUsers(activeSessionRows),
+        active_users_24h: uniqueUsers(eventRows), events_24h: eventRows.length,
+        messages_24h: countEvents("message_sent"), dms_24h: countEvents("dm_sent"),
+        calls_24h: countEvents("call_started"), uploads_24h: countEvents("file_uploaded"),
+      } });
     }
     if (action === "users") {
       const page = Math.max(1, Number(input.page) || 1);
