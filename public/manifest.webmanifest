@@ -6,11 +6,62 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["fullscreen", "standalone"],
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
   "orientation": "any",
   "background_color": "#090d18",
   "theme_color": "#090d18",
   "icons": [
-    {"src":"./icons/nexus.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+    {
+      "src": "./icons/nexus.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "./",
+  "categories": [
+    "communication",
+    "productivity"
+  ],
+  "shortcuts": [
+    {
+      "name": "채널 메시지",
+      "short_name": "채팅",
+      "url": "./?section=messages",
+      "icons": [
+        {
+          "src": "./icons/nexus.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "개인 메시지",
+      "short_name": "DM",
+      "url": "./?section=dms",
+      "icons": [
+        {
+          "src": "./icons/nexus.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "음성·영상 통화",
+      "short_name": "통화",
+      "url": "./?section=meetings",
+      "icons": [
+        {
+          "src": "./icons/nexus.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
   ]
 }
