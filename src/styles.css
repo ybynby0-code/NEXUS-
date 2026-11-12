@@ -1693,3 +1693,32 @@ body::after{
 .theme-light .message-body>p{color:#dce4f1!important}
 .theme-light .message-actions button{color:#c4cee0}
 
+
+
+/* NEXUS 2.0 — consistent message timeline and touch-first controls */
+.message-entry{display:contents}
+.message-entry>.date-divider{margin:22px 0 14px}
+.message-row.message-grouped{margin-top:0;padding-top:4px}
+.message-row.message-grouped>.avatar{visibility:hidden;height:0;min-height:0;box-shadow:none}
+.message-row.message-grouped .message-meta{min-height:16px}
+.message-row.message-grouped .message-meta time{opacity:.58}
+.message-row:not(.message-grouped){margin-top:9px}
+.message-row.message-grouped .message-body>p{margin-top:2px!important}
+.message-row.message-mention-target{outline:1px solid rgba(158,145,255,.55);background:rgba(123,105,239,.13);box-shadow:0 0 0 4px rgba(123,105,239,.06)}
+.message-row .message-actions button{min-height:32px}
+.chat-panel{isolation:isolate}
+.chat-panel:after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 85% 82%,rgba(40,145,171,.045),transparent 45%),radial-gradient(ellipse at 12% 8%,rgba(127,99,230,.055),transparent 42%)}
+.app-shell,.sidebar,.nav-rail,.topbar,.chat-panel,.section-card{transition:background-color .24s ease,border-color .24s ease}
+button,.icon-button,.side-link,.channel-link{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid rgba(157,142,255,.82);outline-offset:2px}
+@media(max-width:760px){
+  .app-shell{min-height:100dvh;height:100dvh}
+  .message-row.message-grouped>.avatar{display:block;visibility:hidden;flex-basis:35px;width:35px;height:0;min-height:0}
+  .message-row{overflow:visible}
+  .message-actions{flex-wrap:wrap}
+  .message-actions button{min-height:34px;padding:6px 9px}
+  .date-divider{margin:17px 0 12px}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell,.sidebar,.nav-rail,.topbar,.chat-panel,.section-card{transition:none}
+}
