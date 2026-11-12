@@ -432,6 +432,21 @@ function WorkspaceApp() {
   useEffect(()=>{if(section==='dms'&&currentUser)loadDmConversations();},[section,currentUser?.id]);
   useEffect(()=>{const params=new URLSearchParams(window.location.search);const call=params.get('call');const requested=params.get('section');if(call&&/^[A-Z0-9]{12,16}$/i.test(call)){setIncomingCallCode(call.toUpperCase());setSection('meetings');window.history.replaceState({},'',window.location.pathname);}else if(['home','messages','dms','community','meetings','files'].includes(requested||''))setSection(requested as Section);},[]);
   useEffect(()=>{const params=new URLSearchParams(window.location.search);const id=params.get('conversation');const channel=params.get('channel');const messageId=params.get('message');if(messageId)setHighlightedMessageId(messageId);if(channel&&Object.values(channelIds).includes(channel)){const name=Object.keys(channelIds).find(k=>channelIds[k]===channel);if(name){setActiveChannel(name);setSection('messages');window.history.replaceState({},'',window.location.pathname);}}if(!id||!dmConversations.length)return;const match=dmConversations.find(c=>c.id===id);if(match){setActiveDm(match);setSection('dms');window.history.replaceState({},'',window.location.pathname);}},[dmConversations,channelIds]);
+  // Keep channel and DM timelines pinned to the newest message.
+  useEffect(()=>{
+    if(section!=='messages')return;
+    const el=document.querySelector<HTMLElement>('.message-list');
+    if(!el)return;
+    const frame=requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+    return()=>cancelAnimationFrame(frame);
+  },[section,activeChannel,messages]);
+  useEffect(()=>{
+    if(section!=='dms'||!activeDm)return;
+    const el=document.querySelector<HTMLElement>('.dm-message-list');
+    if(!el)return;
+    const frame=requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});
+    return()=>cancelAnimationFrame(frame);
+  },[section,activeDm?.id,dmMessages]);
   useEffect(()=>{if(!highlightedMessageId)return;const target=document.querySelector<HTMLElement>('[data-message-id="'+CSS.escape(highlightedMessageId)+'"]');if(!target)return;target.scrollIntoView({behavior:'smooth',block:'center'});const timer=window.setTimeout(()=>setHighlightedMessageId(null),5000);return()=>window.clearTimeout(timer);},[messages,highlightedMessageId]);
 
   const openDm=async(person:any)=>{
