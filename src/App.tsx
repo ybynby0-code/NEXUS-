@@ -1126,6 +1126,20 @@ function WorkspaceApp() {
   };
 
   return <div className={'app-shell theme-'+profile.theme_mode} style={{'--user-accent':profile.theme_color,'--theme-glow-a':themeSettings.glow_a,'--theme-glow-b':themeSettings.glow_b,'--theme-intensity':themeSettings.intensity+'%','--theme-blur':themeSettings.blur+'px','--theme-brightness':themeSettings.brightness+'%', '--theme-animated':themeSettings.animated?'1':'0',backgroundImage:profile.theme_background_url?'linear-gradient(115deg,rgba(8,12,21,.78),rgba(9,14,24,.62)),url("'+profile.theme_background_url+'")':undefined,backgroundSize:'cover',backgroundPosition:'center'} as any}>
+    <nav className="server-rail" aria-label="빠른 이동">
+      <button className="server-rail-brand" onClick={()=>setSection('home')} aria-label="NEXUS 홈">N<span>•</span></button>
+      <span className="server-rail-divider"/>
+      <button className={`server-rail-button ${section==='home'?'active':''}`} onClick={()=>setSection('home')} title="홈" aria-label="홈"><LayoutGrid size={20}/></button>
+      <button className={`server-rail-button ${section==='messages'?'active':''}`} onClick={()=>setSection('messages')} title="채널" aria-label="채널"><MessageCircle size={20}/></button>
+      <button className={`server-rail-button ${section==='dms'?'active':''}`} onClick={()=>setSection('dms')} title="다이렉트 메시지" aria-label="다이렉트 메시지"><Users size={20}/></button>
+      <button className={`server-rail-button ${section==='community'?'active':''}`} onClick={()=>setSection('community')} title="친구 및 멤버" aria-label="친구 및 멤버"><Compass size={20}/></button>
+      <span className="server-rail-divider"/>
+      <button className="server-rail-workspace" onClick={()=>setWorkspaceMenuOpen(v=>!v)} title="현재 워크스페이스">{String(workspaces.find(w=>w.id===workspaceId)?.name||'N').slice(0,1).toUpperCase()}</button>
+      <button className="server-rail-add" onClick={()=>setWorkspaceMenuOpen(true)} title="워크스페이스 전환 및 추가"><Plus size={20}/></button>
+      <span className="server-rail-spacer"/>
+      <button className="server-rail-button" onClick={()=>setSettingsOpen(true)} title="설정" aria-label="설정"><Settings size={19}/></button>
+      <div className="server-rail-user">{String(profile.display_name||currentUser?.name||'U').slice(0,1).toUpperCase()}</div>
+    </nav>
     <aside className={`sidebar ${mobilePanel==='nav'?'mobile-open':''}`}>
 
       <button className="workspace-switch" onClick={()=>setWorkspaceMenuOpen(v=>!v)} aria-expanded={workspaceMenuOpen}><div className="workspace-icon">N<span>•</span></div><div><strong>{workspaces.find(w=>w.id===workspaceId)?.name||'NEXUS'}</strong><small>팀 작업 공간</small></div><ChevronDown size={16}/></button>{workspaceMenuOpen&&<div className="workspace-menu">{workspaces.map(w=><button key={w.id} className={w.id===workspaceId?'active':''} onClick={()=>switchWorkspace(w.id)}>{w.name}{w.id===workspaceId&&<Check size={14}/>}</button>)}<div className="workspace-create"><input value={workspaceDraft} onChange={e=>setWorkspaceDraft(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createWorkspace()} placeholder="새 워크스페이스 이름" maxLength={80}/><button onClick={createWorkspace} disabled={workspaceBusy}><Plus size={14}/></button></div></div>}
