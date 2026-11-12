@@ -1511,3 +1511,185 @@ body::before{
 @keyframes developerRainbow{0%{background-position:0% 50%}100%{background-position:300% 50%}}
 @keyframes developerShimmer{0%{filter:drop-shadow(0 0 3px rgba(255,83,172,.32)) brightness(1)}100%{filter:drop-shadow(0 0 9px rgba(83,218,255,.72)) brightness(1.28)}}
 @media(prefers-reduced-motion:reduce){.developer-name{animation:none;background-position:50% 50%}}
+
+/* NEXUS visual refresh — channel chat, composer and ambient background */
+body::after{
+  content:"";
+  position:fixed;
+  z-index:-1;
+  inset:0;
+  pointer-events:none;
+  opacity:.32;
+  background-image:
+    radial-gradient(circle at 1px 1px,rgba(194,205,255,.16) 1px,transparent 0);
+  background-size:34px 34px;
+  mask-image:linear-gradient(180deg,rgba(0,0,0,.55),transparent 78%);
+}
+.chat-panel{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(145deg,rgba(11,17,29,.34),rgba(8,13,23,.16))!important;
+}
+.chat-panel:before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  top:-210px;
+  left:18%;
+  width:min(620px,80vw);
+  height:360px;
+  pointer-events:none;
+  background:radial-gradient(ellipse,rgba(103,91,220,.13),rgba(46,154,190,.055) 42%,transparent 72%);
+  filter:blur(18px);
+}
+.chat-panel>.panel-heading,
+.chat-panel>.message-list,
+.chat-panel>.composer-wrap,
+.chat-panel>.member-drawer{position:relative;z-index:1}
+.chat-panel>.panel-heading{
+  border-bottom:1px solid rgba(164,180,220,.075);
+  background:linear-gradient(180deg,rgba(18,27,44,.52),rgba(12,19,32,.12))!important;
+  padding:22px clamp(16px,3vw,36px) 17px;
+}
+.panel-heading h1{display:flex;align-items:center;gap:8px;font-size:clamp(19px,2vw,23px)!important;letter-spacing:-.65px}
+.panel-heading h1 svg{filter:drop-shadow(0 0 8px rgba(145,128,255,.48))}
+.heading-actions{gap:6px}
+.heading-actions .icon-button{
+  width:36px;height:36px;border:1px solid rgba(165,178,220,.12);
+  background:rgba(19,29,47,.42);border-radius:11px;
+  transition:background .2s,border-color .2s,transform .2s,color .2s;
+}
+.heading-actions .icon-button:hover{transform:translateY(-2px);background:rgba(124,109,235,.16);border-color:rgba(156,142,255,.36)}
+.message-list{
+  position:relative;
+  padding:10px clamp(14px,3vw,36px) 24px;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(139,126,224,.35) transparent;
+  overscroll-behavior:contain;
+}
+.date-divider{
+  display:flex;align-items:center;gap:12px;
+  margin:13px 0 21px;color:#a9a8c8;
+  font:700 9px/1.2 'DM Mono',ui-monospace,monospace;
+  letter-spacing:.09em;text-transform:uppercase;
+}
+.date-divider:before,.date-divider:after{height:1px;background:linear-gradient(90deg,transparent,rgba(150,145,220,.22))}
+.date-divider:after{background:linear-gradient(90deg,rgba(150,145,220,.22),transparent)}
+.date-divider span{
+  padding:7px 11px;border:1px solid rgba(151,139,239,.17);
+  border-radius:999px;background:rgba(28,32,56,.46);
+  box-shadow:inset 0 1px rgba(255,255,255,.035),0 5px 18px rgba(0,0,0,.08);
+}
+.message-row{
+  display:flex;align-items:flex-start;gap:12px;
+  margin:5px -10px;padding:10px;
+  border:1px solid transparent;border-radius:14px;
+  transition:background .2s,border-color .2s,transform .2s;
+  animation:nexus-message-arrive .28s ease both;
+}
+@keyframes nexus-message-arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.message-row:hover{
+  background:linear-gradient(100deg,rgba(125,111,235,.075),rgba(42,132,160,.025) 68%,transparent);
+  border-color:rgba(157,146,236,.09);
+}
+.message-row.message-pinned{background:linear-gradient(100deg,rgba(230,177,91,.055),transparent 72%)}
+.message-row>.avatar{
+  flex:0 0 40px;width:40px;height:40px;
+  border:1px solid rgba(205,210,255,.14);
+  box-shadow:0 5px 16px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.08);
+  transition:transform .2s,box-shadow .2s;
+}
+.message-row>.avatar:hover{transform:translateY(-2px) scale(1.035);box-shadow:0 7px 20px rgba(0,0,0,.3),0 0 16px rgba(133,116,255,.16)}
+.message-body{min-width:0;flex:1}
+.message-meta{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-height:20px}
+.message-meta strong{font-size:13px!important;font-weight:750!important;letter-spacing:-.15px}
+.message-meta time{font-size:10px!important;letter-spacing:.01em}
+.message-body>p{
+  margin:4px 0 0!important;
+  max-width: min(100%, 920px);
+  color:#d6deed!important;
+  font-size:13px!important;line-height:1.72!important;
+  overflow-wrap:anywhere;
+}
+.message-mention{
+  display:inline;padding:2px 5px;border-radius:5px;
+  background:rgba(133,116,255,.17);color:#c9c0ff;
+  box-shadow:inset 0 0 0 1px rgba(153,139,255,.12);
+}
+.message-edited{font-size:9px;color:#7e8ca4}
+.message-pin-label{font-size:9px;color:#f0c879}
+.message-actions{
+  display:flex;align-items:center;flex-wrap:wrap;gap:5px;
+  margin-top:7px;opacity:.76;transition:opacity .18s;
+}
+.message-row:hover .message-actions,.message-actions:focus-within{opacity:1}
+.message-actions button{
+  min-height:26px;padding:4px 8px;border:1px solid rgba(151,164,195,.12);
+  border-radius:8px;background:rgba(18,27,43,.52);
+  color:#aebbd0;font-size:10px;transition:all .18s;
+}
+.message-actions button:hover{border-color:rgba(151,137,255,.36);background:rgba(126,110,235,.16);color:#f1efff}
+.message-actions button.reaction-active{border-color:rgba(148,130,255,.48);background:rgba(128,110,240,.2);color:#d9d1ff}
+.message-actions .message-delete:hover{border-color:rgba(255,108,126,.4);background:rgba(210,67,90,.13);color:#ffb1bc}
+.message-reply-ref{display:flex;width:fit-content;max-width:100%;margin:4px 0 7px}
+.composer-wrap{
+  padding:12px clamp(14px,3vw,36px) max(17px,env(safe-area-inset-bottom));
+  border-top:1px solid rgba(155,171,208,.08);
+  background:linear-gradient(180deg,rgba(9,15,25,.08),rgba(9,15,25,.56));
+}
+.composer-context{
+  margin:0 0 8px;padding:8px 11px;border:1px solid rgba(147,132,245,.2);
+  border-radius:10px;background:rgba(112,96,220,.1);color:#c9c1ff;font-size:11px;
+}
+.composer-area{position:relative}
+.composer{
+  min-height:54px;height:auto!important;padding:6px 8px!important;gap:7px;
+  border:1px solid rgba(156,171,205,.17)!important;
+  border-radius:16px!important;
+  background:linear-gradient(115deg,rgba(19,29,47,.96),rgba(13,23,38,.96))!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.035)!important;
+  transition:border-color .2s,box-shadow .2s,transform .2s;
+}
+.composer:focus-within{
+  border-color:rgba(143,127,255,.62)!important;
+  box-shadow:0 0 0 3px rgba(127,108,245,.12),0 14px 38px rgba(0,0,0,.24)!important;
+}
+.composer input{min-width:0;min-height:38px;font-size:13px!important}
+.attach-button,.composer-tool,.send-button{
+  flex:0 0 36px;width:36px;height:36px;border-radius:11px;
+  display:grid;place-items:center;transition:transform .18s,background .18s,color .18s;
+}
+.attach-button:hover,.composer-tool:hover{background:rgba(137,124,231,.14);color:#e3deff;transform:translateY(-1px)}
+.send-button{box-shadow:0 4px 14px rgba(111,94,226,.25)}
+.send-button:hover{transform:translateY(-1px);box-shadow:0 7px 19px rgba(111,94,226,.35)}
+.composer-hint{margin:7px 3px 0;font-size:10px;letter-spacing:.01em;color:#77869d}
+.mention-suggestions{
+  border:1px solid rgba(155,140,255,.22);border-radius:14px;
+  background:rgba(13,21,36,.97);box-shadow:0 18px 48px rgba(0,0,0,.38);
+  -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+}
+@media(max-width:760px){
+  .chat-panel>.panel-heading{padding:14px 14px 12px}
+  .panel-heading h1{font-size:19px!important}
+  .heading-actions{gap:3px}
+  .heading-actions .icon-button{width:33px;height:33px}
+  .message-list{padding:8px 13px 18px}
+  .message-row{gap:9px;margin:4px -5px;padding:9px 6px;border-radius:12px}
+  .message-row>.avatar{flex-basis:35px;width:35px;height:35px}
+  .message-meta{gap:6px}
+  .message-meta strong{font-size:12px!important}
+  .message-body>p{font-size:12px!important;line-height:1.68!important}
+  .message-actions{opacity:1;gap:4px}
+  .message-actions button{min-height:30px;padding:5px 8px;font-size:10px}
+  .composer-wrap{padding:10px 12px max(12px,env(safe-area-inset-bottom))}
+  .composer{border-radius:14px!important}
+  .composer-hint{font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){
+  .message-row{animation:none;transition:none}
+  .message-row>.avatar,.heading-actions .icon-button,.send-button{transition:none}
+}
+.theme-light body::after{opacity:.12}
+.theme-light .message-body>p{color:#dce4f1!important}
+.theme-light .message-actions button{color:#c4cee0}
+
