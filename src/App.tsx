@@ -845,52 +845,20 @@ function WorkspaceApp() {
     recordUsage('message_sent');
     setMessage('');setReplyTo(null);setMentionQuery(null);stopChannelTyping();
     if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,createdAt:data.created_at,name:'나',initials:'나',color:'orange',avatarUrl:profile.avatar_url||undefined,profileDecoration:profile.profile_decoration||'none',themeColor:profile.theme_color||undefined,time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id,parent_message_id:data.parent_message_id,reactions:[]}]);
-    // Mention and ping share the same notification pipeline. Resolve both selected
-    // autocomplete tokens and manually typed @display-names, including punctuation.
+    // Mention and ping share the same notification pipeline.
     const recipientMap=new Map<string,{user_id:string}>();
+    const normalizedContent=content.normalize('NFC');
     for(const selected of mentionSelections){
       const token=selected.token.normalize('NFC');
-      if(content.normalize('NFC').toLocaleLowerCase().includes(token.toLocaleLowerCase())&&selected.user_id!==currentUser.id){
-        recipientMap.set(selected.user_id,{user_id:selected.user_id});
-      }
+      if(normalizedContent.toLocaleLowerCase().includes(token.toLocaleLowerCase())&&selected.user_id!==currentUser.id)recipientMap.set(selected.user_id,{user_id:selected.user_id});
     }
-    const normalizedContent=content.normalize('NFC');
     for(const member of members){
       if(member.user_id===currentUser.id)continue;
       const nickname=String(member.person?.display_name||'').trim().normalize('NFC');
       if(!nickname)continue;
-      const escaped=nickname.replace(/[.*+?^${}()|[\]\\]/g,'\\    // Autocomplete selection is authoritative; also resolve manually typed exact @nicknames.
-    // This keeps @nickname notifications working even when the sender does not tap a suggestion.
-    const recipientMap=new Map<string,{user_id:string}>();
-    for(const selected of mentionSelections){
-      if(content.includes(selected.token)&&selected.user_id!==currentUser.id)recipientMap.set(selected.user_id,{user_id:selected.user_id});
-    }
-    for(const member of members){
-      if(member.user_id===currentUser.id)continue;
-      const nickname=String(member.person?.display_name||'').trim();
-      if(!nickname)continue;
-      const lowerContent=content.toLocaleLowerCase();
-      const needle='@'+nickname.toLocaleLowerCase();
-      let offset=0;let found=false;
-      while((offset=lowerContent.indexOf(needle,offset))!==-1){
-        const before=offset===0?' ':lowerContent[offset-1];
-        const after=lowerContent[offset+needle.length]||' ';
-        if(/\s/.test(before)&&(/[\s.,!?)]/.test(after))){found=true;break;}
-        offset+=needle.length;
-      }
-      if(found)recipientMap.set(member.user_id,{user_id:member.user_id});
-    }
-    const recipients=[...recipientMap.values()];
-    setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
-    for(const target of recipients){const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';const body=content.length>140?content.slice(0,137)+'...':content;const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId,source_id:data?.id});if(noticeError){console.warn('[NEXUS mention notification]',noticeError);continue;}try{const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'mention',recipient_id:target.user_id,title,body,conversation_id:channelId,resource_id:data?.id,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)+'&message='+encodeURIComponent(data?.id||'')}});if(pushError)console.warn('[NEXUS mention push]',pushError);}catch(e){console.warn('[NEXUS mention push]',e);}}');
-      let matched=false;
-      try{
-        const pattern=new RegExp('(^|[^\\p{L}\\p{N}_])@'+escaped+'(?=$|[^\\p{L}\\p{N}_])','iu');
-        matched=pattern.test(normalizedContent);
-      }catch{
-        matched=normalizedContent.toLocaleLowerCase().includes('@'+nickname.toLocaleLowerCase());
-      }
-      if(matched)recipientMap.set(member.user_id,{user_id:member.user_id});
+      const escaped=nickname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern=new RegExp('(^|[^\\p{L}\\p{N}_])@'+escaped+'(?=$|[^\\p{L}\\p{N}_])','iu');
+      if(pattern.test(normalizedContent))recipientMap.set(member.user_id,{user_id:member.user_id});
     }
     const recipients=[...recipientMap.values()];
     setMentionSelections(v=>v.filter(x=>!content.includes(x.token)));
@@ -898,29 +866,15 @@ function WorkspaceApp() {
     for(const target of recipients){
       const title=(profile.display_name||currentUser.name)+'님이 회원님을 멘션했습니다.';
       const body=content.length>140?content.slice(0,137)+'...':content;
-      const {error:noticeError}=await supabase.from('notifications').insert({
-        recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',
-        title,body,target_id:channelId,source_id:data?.id
-      });
-      if(noticeError){
-        console.error('[NEXUS mention notification]',noticeError);
-        notify('메시지는 전송됐지만 멘션 알림 저장에 실패했습니다: '+noticeError.message);
-        continue;
-      }
+      const {error:noticeError}=await supabase.from('notifications').insert({recipient_id:target.user_id,actor_id:currentUser.id,type:'mention',title,body,target_id:channelId,source_id:data?.id});
+      if(noticeError){console.error('[NEXUS mention notification]',noticeError);notify('메시지는 전송됐지만 멘션 알림 저장에 실패했습니다: '+noticeError.message);continue;}
       delivered++;
       try{
-        const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{
-          kind:'mention',recipient_id:target.user_id,title,body,
-          conversation_id:channelId,resource_id:data?.id,
-          tag:'nexus-mention-'+data?.id,
-          url:'./?section=messages&channel='+encodeURIComponent(channelId)+'&message='+encodeURIComponent(data?.id||'')
-        }});
+        const {error:pushError}=await supabase.functions.invoke('nexus-push',{body:{kind:'mention',recipient_id:target.user_id,title,body,conversation_id:channelId,resource_id:data?.id,tag:'nexus-mention-'+data?.id,url:'./?section=messages&channel='+encodeURIComponent(channelId)+'&message='+encodeURIComponent(data?.id||'')}});
         if(pushError)console.warn('[NEXUS mention push]',pushError);
       }catch(e){console.warn('[NEXUS mention push]',e);}
     }
-    if(recipients.length&&delivered===recipients.length){
-      notify(recipients.length+'명에게 멘션 알림을 보냈습니다.');
-    }
+    if(recipients.length&&delivered===recipients.length)notify(recipients.length+'명에게 멘션 알림을 보냈습니다.');
   };
   const openPinnedMessages=async()=>{
     if(!supabase||!channelIds[activeChannel])return;
