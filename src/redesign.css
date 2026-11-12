@@ -173,3 +173,53 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .toast{bottom:76px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+/* NEXUS 2.1 — message and member interaction polish */
+.member-toggle.active{background:#34334f;color:#bdb9ff}
+.member-drawer-scrim{position:fixed;inset:0;z-index:39;border:0;background:#05060999;backdrop-filter:blur(2px)}
+.member-drawer{position:fixed;z-index:40;right:0;top:62px;bottom:32px;width:min(340px,88vw);display:flex;flex-direction:column;background:#191a20;border-left:1px solid #393b46;box-shadow:-22px 0 65px #0008;animation:member-drawer-in .2s ease-out}
+@keyframes member-drawer-in{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+.member-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:21px 19px 16px;border-bottom:1px solid #30323a}
+.member-drawer-head h2{font-size:19px;margin-top:5px;letter-spacing:-.03em}
+.member-drawer-head h2 span{font-size:12px;color:#999eaa;font-weight:500;margin-left:5px}
+.member-drawer-summary{display:flex;align-items:center;gap:9px;margin:14px 13px 8px;padding:11px 12px;border-radius:9px;background:#24252c;color:#aeb2bd;font-size:11px}
+.member-drawer-summary svg{color:#aaa5ff}
+.member-drawer-summary strong{margin-left:auto;color:#f1f1f4}
+.member-drawer-list{padding:5px 10px 15px;overflow:auto;flex:1}
+.member-drawer-item{display:flex;align-items:center;gap:11px;padding:10px 9px;border-radius:9px;transition:background .15s}
+.member-drawer-item:hover{background:#26272e}
+.member-drawer-avatar{width:37px;height:37px;flex:0 0 37px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:linear-gradient(145deg,#555a78,#343747);color:#fff;font-size:13px;font-weight:700}
+.member-drawer-avatar img{width:100%;height:100%;object-fit:cover}
+.member-drawer-info{display:flex;flex-direction:column;gap:4px;min-width:0}
+.member-drawer-info strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#eceef2}
+.member-drawer-info small{font-size:10px;color:#9298a5}
+.member-role-dot{width:8px;height:8px;border-radius:50%;margin-left:auto;background:#626775}
+.member-role-dot.owner{background:#f0c66c;box-shadow:0 0 9px #f0c66c55}
+.member-role-dot.admin{background:#9c91ff;box-shadow:0 0 9px #9c91ff55}
+.member-drawer-empty{padding:25px 10px;text-align:center;color:#9298a5;font-size:12px}
+.member-drawer-footer{margin:10px 13px 14px;padding:12px 13px;border:1px solid #3b3d49;border-radius:9px;background:#24252d;color:#d9d9e1;text-align:left;font-size:11px}
+.member-drawer-footer span{float:right;color:#aaa5ff}
+.message-row{position:relative;align-items:flex-start;padding:8px 10px;margin:8px 0;border:1px solid transparent}
+.message-row:hover{border-color:#2b2d36;background:#1a1b21}
+.message-row .avatar{box-shadow:0 0 0 2px #111214}
+.message-meta{align-items:center;flex-wrap:wrap}
+.message-meta strong{font-size:13px}
+.message-meta time{font-size:10px}
+.message-body p{font-size:12.5px;line-height:1.8;color:#d9dbe1}
+.message-reply-ref{display:inline-flex;margin:4px 0 7px;padding:5px 9px;border-left:2px solid #8983ef;border-radius:0 6px 6px 0;background:#252538;color:#bdb9ff;font-size:10px}
+.message-translation{margin-top:8px;padding:9px 11px;border:1px solid #35364a;border-radius:8px;background:#20212d}
+.message-translation>div{font-size:9px;color:#aaa5ff;letter-spacing:.04em}
+.message-translation p{font-size:11px;color:#c7c9d2}
+.message-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.message-actions button{font-size:10px;padding:5px 8px}
+.message-actions button.reaction-active{background:#3c385f;border-color:#7770c9;color:#d2ceff}
+.message-pinned{border-color:#5a4d2c;background:#211f1a}
+.message-pinned:hover{background:#29251d}
+@media(max-width:760px){
+ .member-drawer{top:54px;bottom:62px;width:min(340px,90vw)}
+ .member-drawer-head{padding:16px 15px 13px}
+ .message-row{padding:7px 5px;margin:7px 0;gap:8px}
+ .message-body p{font-size:11.5px;line-height:1.7}
+ .message-actions{gap:4px}
+ .message-actions button{padding:6px 8px}
+}
