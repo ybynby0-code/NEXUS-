@@ -31,7 +31,7 @@ function WorkspaceApp() {
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
   const [replyTo,setReplyTo] = useState<ChatMessage|null>(null);
   const [editingMessageId,setEditingMessageId] = useState<string|null>(null);
-  const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string}|null>(null);
+  const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string;isDeveloper?:boolean}|null>(null);
   const [adminRole,setAdminRole] = useState<string|null>(null);
   const [workspaceId,setWorkspaceId] = useState<string|null>(null);
   const [channelIds,setChannelIds] = useState<Record<string,string>>({});
