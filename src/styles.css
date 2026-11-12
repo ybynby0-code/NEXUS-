@@ -1732,3 +1732,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 @keyframes typingPulse{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-3px);opacity:1}}
 @keyframes typingFadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.typing-indicator,.typing-dots i{animation:none}}
+
+
+/* NEXUS ADMIN role identity */
+.nexus-admin-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid rgba(105,190,255,.3);border-radius:999px;background:linear-gradient(110deg,rgba(49,130,210,.2),rgba(117,91,224,.18));color:#a9d9ff;font:800 10px/1.1 'Orbitron',system-ui,sans-serif;letter-spacing:.08em;text-shadow:0 0 12px rgba(93,177,255,.28);box-shadow:inset 0 1px rgba(255,255,255,.06),0 4px 16px rgba(36,106,190,.1)}
