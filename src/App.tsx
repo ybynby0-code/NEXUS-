@@ -29,6 +29,10 @@ function WorkspaceApp() {
   const [highlightedMessageId,setHighlightedMessageId] = useState<string|null>(null);
   const [mentionSelections,setMentionSelections] = useState<Array<{token:string;user_id:string}>>([]);
   const [messages,setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [typingUsers,setTypingUsers] = useState<Array<{userId:string;name:string;updatedAt:number}>>([]);
+  const typingChannelRef=useRef<any>(null);
+  const typingIdleTimerRef=useRef<number|undefined>(undefined);
+  const typingActiveRef=useRef(false);
   const [replyTo,setReplyTo] = useState<ChatMessage|null>(null);
   const [editingMessageId,setEditingMessageId] = useState<string|null>(null);
   const [currentUser,setCurrentUser] = useState<{id:string;name:string;email?:string;isDeveloper?:boolean}|null>(null);
@@ -283,6 +287,18 @@ function WorkspaceApp() {
     boot().catch(e=>{console.error(e);if(alive)notify('서버 초기화 실패: '+(e?.message||'오류'));});
     return()=>{alive=false};
   },[]);
+  useEffect(()=>{
+    if(!supabase||!dbReady||!currentUser||!channelIds[activeChannel]){setTypingUsers([]);return;}
+    let alive=true;const channelId=channelIds[activeChannel];
+    const typingChannel=supabase.channel('nexus-typing-'+channelId,{config:{private:true}})
+      .on('broadcast',{event:'typing'},({payload}:any)=>{
+        if(!alive||!payload?.userId||payload.userId===currentUser.id)return;
+        setTypingUsers(prev=>payload.isTyping?[...prev.filter(user=>user.userId!==payload.userId),{userId:payload.userId,name:String(payload.name||'사용자').slice(0,40),updatedAt:Date.now()}]:prev.filter(user=>user.userId!==payload.userId));
+      })
+      .subscribe((status:string)=>{if(status==='SUBSCRIBED'&&alive)typingChannelRef.current=typingChannel;});
+    const pruneTimer=window.setInterval(()=>setTypingUsers(prev=>prev.filter(user=>Date.now()-user.updatedAt<2800)),1000);
+    return()=>{alive=false;window.clearInterval(pruneTimer);if(typingChannelRef.current===typingChannel)typingChannelRef.current=null;typingActiveRef.current=false;if(typingIdleTimerRef.current!==undefined)window.clearTimeout(typingIdleTimerRef.current);typingIdleTimerRef.current=undefined;setTypingUsers([]);void supabase.removeChannel(typingChannel);};
+  },[dbReady,activeChannel,channelIds,currentUser?.id]);
   useEffect(()=>{
     if(!supabase||!dbReady||!channelIds[activeChannel])return;
     let alive=true;const channelId=channelIds[activeChannel];
@@ -766,6 +782,21 @@ function WorkspaceApp() {
   };
 
   const updateMessageDraft=(value:string)=>{setMessage(value);const match=value.match(/(?:^|\s)@([^\s@]*)$/);setMentionQuery(match?match[1]:null);};
+  const stopChannelTyping=()=>{
+    if(typingIdleTimerRef.current!==undefined)window.clearTimeout(typingIdleTimerRef.current);
+    typingIdleTimerRef.current=undefined;
+    if(typingActiveRef.current&&typingChannelRef.current&&currentUser)void typingChannelRef.current.send({type:'broadcast',event:'typing',payload:{userId:currentUser.id,isTyping:false}});
+    typingActiveRef.current=false;
+  };
+  const handleMessageDraftChange=(value:string)=>{
+    updateMessageDraft(value);
+    if(!value.trim()||editingMessageId){stopChannelTyping();return;}
+    const channel=typingChannelRef.current;
+    if(channel&&currentUser&&!typingActiveRef.current){typingActiveRef.current=true;void channel.send({type:'broadcast',event:'typing',payload:{userId:currentUser.id,name:profile.display_name||currentUser.name,isTyping:true}});}
+    if(typingIdleTimerRef.current!==undefined)window.clearTimeout(typingIdleTimerRef.current);
+    typingIdleTimerRef.current=window.setTimeout(stopChannelTyping,1600);
+  };
+
   const mentionCandidates=mentionQuery===null?[]:members.filter((m:any)=>m.user_id!==currentUser?.id&&String(m.person?.display_name||'').toLowerCase().includes(mentionQuery.toLowerCase())).slice(0,6);
   const insertMention=(member:any)=>{const name=String(member.person?.display_name||'사용자').trim();const match=message.match(/(?:^|\s)@([^\s@]*)$/);const prefix=match?message.slice(0,message.length-match[0].length):message;const token='@'+name;updateMessageDraft(prefix+token+' ');setMentionSelections(v=>[...v.filter(x=>x.token!==token),{token,user_id:member.user_id}]);setMentionQuery(null);};
   const sendMessage=async()=>{
@@ -781,7 +812,7 @@ function WorkspaceApp() {
     const {data,error}=await supabase.from('messages').insert({channel_id:channelId,author_id:currentUser.id,content,parent_message_id:replyTo?.id||null}).select('id,content,created_at,author_id,parent_message_id').single();
     if(error){notify('전송 실패: '+error.message);return;}
     recordUsage('message_sent');
-    setMessage('');setReplyTo(null);setMentionQuery(null);
+    setMessage('');setReplyTo(null);setMentionQuery(null);stopChannelTyping();
     if(data)setMessages(v=>v.some(m=>m.id===data.id)?v:[...v,{id:data.id,createdAt:data.created_at,name:'나',initials:'나',color:'orange',avatarUrl:profile.avatar_url||undefined,profileDecoration:profile.profile_decoration||'none',themeColor:profile.theme_color||undefined,time:new Date(data.created_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),text:data.content,author_id:data.author_id,parent_message_id:data.parent_message_id,reactions:[]}]);
     // Autocomplete selection is authoritative; also resolve manually typed exact @nicknames.
     // This keeps @nickname notifications working even when the sender does not tap a suggestion.
@@ -1208,8 +1239,9 @@ function WorkspaceApp() {
           <div className="message-list">
             <div className="date-divider"><span>{dbReady?"실시간 서버 연결됨":"서버 연결 중"}</span></div>
             {messages.map((m,index)=>{const stamp=m.createdAt?new Date(m.createdAt):new Date();const previous=messages[index-1];const previousStamp=previous?.createdAt?new Date(previous.createdAt):null;const sameDay=!!previousStamp&&previousStamp.toDateString()===stamp.toDateString();const grouped=!!previous&&sameDay&&previous.author_id===m.author_id&&stamp.getTime()-previousStamp!.getTime()<5*60*1000;const today=new Date().toDateString()===stamp.toDateString();const yesterday=new Date(Date.now()-86400000).toDateString()===stamp.toDateString();const dateLabel=today?'오늘':yesterday?'어제':stamp.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});return <div className="message-entry" key={m.id}>{!sameDay&&<div className="date-divider"><span>{dateLabel}</span></div>}<article data-message-id={m.id} className={`message-row ${grouped?'message-grouped':''} ${m.pinned_at?'message-pinned':''} ${highlightedMessageId===m.id?'message-mention-target':''}`}><button type="button" className={'avatar '+m.color+' decoration-'+(m.profileDecoration||'none')} style={{'--user-accent':m.themeColor||'#7867e8'} as any} onClick={()=>m.author_id&&openUserProfile(m.author_id)} aria-label={m.name+' 프로필 보기'}>{m.avatarUrl?<img src={m.avatarUrl} alt={m.name+' 프로필 사진'}/>:m.initials}</button><div className="message-body"><div className="message-meta"><strong className={m.name==='Dev'?'developer-name':''} role="button" tabIndex={0} onClick={()=>m.author_id&&openUserProfile(m.author_id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' ')m.author_id&&openUserProfile(m.author_id)}} style={{color:m.author_id===currentUser?.id?(themeSettings.name_color||"#d9d5ff"):(m.nameColor||undefined),cursor:'pointer'}}>{m.name}</strong><time>{m.time}</time>{m.edited_at&&<small className="message-edited">수정됨</small>}{m.pinned_at&&<span className="message-pin-label">📌 고정됨</span>}{m.name==='NEXUS AI'&&<span className="ai-tag">AI</span>}</div>{m.parent_message_id&&<button type="button" className="message-reply-ref" onClick={()=>{const parent=messages.find(x=>x.id===m.parent_message_id);if(parent){setHighlightedMessageId(parent.id);document.querySelector<HTMLElement>('[data-message-id="'+CSS.escape(parent.id)+'"]')?.scrollIntoView({behavior:'smooth',block:'center'});}else notify('원본 메시지가 최근 메시지 목록에 없습니다. 전체 검색으로 찾아보세요.')}}>↳ {messages.find(x=>x.id===m.parent_message_id)?.name||'이전 메시지'}에게 답장 · 원본 보기</button>}{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim()&&<p>{m.text.replace(/\[NEXUS_FILE:[^\]]+\]/g,'').trim().split(/(@[^\s@]+)/g).map((part,i)=>part.startsWith('@')?<strong className="message-mention" key={i}>{part}</strong>:part)}</p>}{m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)?.[1]&&<button className="message-attachment" onClick={()=>downloadWorkspaceFileById(m.text.match(/\[NEXUS_FILE:([^\]]+)\]/)![1])}><Paperclip size={14}/> 첨부 파일 다운로드</button>}{translatedMessages[m.id]&&<div className="message-translation"><div><Languages size={12}/> 한국어 번역</div><p>{translatedMessages[m.id]}</p></div>}<div className="message-actions"><button onClick={()=>translateMessage(m)} disabled={translatingMessageIds.includes(m.id)}>{translatingMessageIds.includes(m.id)?'번역 중...':translatedMessages[m.id]?'번역 숨기기':'한국어 번역'}</button><button onClick={()=>{setReplyTo(m);setEditingMessageId(null);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>답장</button>{['👍','❤️','😂','🎉'].map(emoji=><button className={(m.reactions||[]).some(x=>x.user_id===currentUser?.id&&x.emoji===emoji)?'reaction-active':''} key={emoji} onClick={()=>toggleMessageReaction(m,emoji)}>{emoji} {(m.reactions||[]).filter(x=>x.emoji===emoji).length||''}</button>)}{m.author_id===currentUser?.id&&<button onClick={()=>togglePinMessage(m)}>{m.pinned_at?'고정 해제':'고정'}</button>}{m.author_id===currentUser?.id&&<><button onClick={()=>{setEditingMessageId(m.id);setReplyTo(null);setMessage(m.text);document.querySelector<HTMLInputElement>('.composer input')?.focus();}}>수정</button><button className="message-delete" onClick={()=>deleteMessage(m)}>삭제</button></>}</div></div></article></div>})}
+            {typingUsers.length>0&&<div className="typing-indicator" role="status" aria-live="polite"><span className="typing-dots"><i/><i/><i/></span><span>{typingUsers.slice(0,2).map(user=>user.name).join(', ')}{typingUsers.length>2?' 외 '+(typingUsers.length-2)+'명':''} 입력 중</span></div>}
           </div>
-          <div className="composer-wrap">{(replyTo||editingMessageId)&&<div className="composer-context"><span>{editingMessageId?'메시지 수정 중':`${replyTo?.name||'사용자'}에게 답장 중`}</span><button onClick={()=>{setReplyTo(null);setEditingMessageId(null);setMessage('');}}>취소</button></div>}<div className="composer-area">{mentionCandidates.length>0&&<div className="mention-suggestions" role="listbox" aria-label="멘션할 멤버">{mentionCandidates.map((member:any)=><button type="button" key={member.user_id} onClick={()=>insertMention(member)}><span className="mention-avatar">{String(member.person?.display_name||'U').slice(0,1)}</span><span><strong>{member.person?.display_name||'사용자'}</strong><small>@{member.person?.display_name||'사용자'} · 워크스페이스 멤버</small></span><b>선택</b></button>)}</div>}<div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={openAttachDialog}><Paperclip size={18}/></button><input value={message} onChange={e=>updateMessageDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){if(mentionCandidates.length){insertMention(mentionCandidates[0]);return;}sendMessage();}}} placeholder={`# ${activeChannel} · @이름으로 멘션`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · @이름을 입력해 멤버를 멘션할 수 있습니다.</div></div></div>
+          <div className="composer-wrap">{(replyTo||editingMessageId)&&<div className="composer-context"><span>{editingMessageId?'메시지 수정 중':`${replyTo?.name||'사용자'}에게 답장 중`}</span><button onClick={()=>{setReplyTo(null);setEditingMessageId(null);setMessage('');}}>취소</button></div>}<div className="composer-area">{mentionCandidates.length>0&&<div className="mention-suggestions" role="listbox" aria-label="멘션할 멤버">{mentionCandidates.map((member:any)=><button type="button" key={member.user_id} onClick={()=>insertMention(member)}><span className="mention-avatar">{String(member.person?.display_name||'U').slice(0,1)}</span><span><strong>{member.person?.display_name||'사용자'}</strong><small>@{member.person?.display_name||'사용자'} · 워크스페이스 멤버</small></span><b>선택</b></button>)}</div>}<div className="composer"><button className="attach-button" aria-label="파일 첨부" onClick={openAttachDialog}><Paperclip size={18}/></button><input value={message} onChange={e=>handleMessageDraftChange(e.target.value)} onBlur={stopChannelTyping} onKeyDown={e=>{if(e.key==='Enter'){if(mentionCandidates.length){insertMention(mentionCandidates[0]);return;}sendMessage();}}} placeholder={`# ${activeChannel} · @이름으로 멘션`} aria-label="메시지 입력"/><button className="composer-tool" aria-label="음성 및 화상 통화 열기" onClick={()=>setSection('meetings')}><Mic size={18}/></button><button className="send-button" onClick={sendMessage} aria-label="전송"><Send size={17}/></button></div><div className="composer-hint">Enter로 전송 · @이름을 입력해 멤버를 멘션할 수 있습니다.</div></div></div>
         </section>
         <aside className={`ai-panel ${mobilePanel==='ai'?'mobile-ai-open':''}`}>
           <div className="ai-header"><div className="ai-symbol"><Sparkles size={17}/></div><div><strong>NEXUS AI</strong><small>통합 AI 어시스턴트</small></div><button className="icon-button mobile-close" onClick={()=>setMobilePanel('none')} aria-label="닫기"><X size={17}/></button><span className="beta-pill">BETA</span></div>
