@@ -1505,8 +1505,8 @@ body::before{
 @media(max-width:600px){.profile-view-backdrop{padding:12px}.profile-view-card{border-radius:19px}.profile-view-banner{height:108px}.profile-view-main{padding:0 17px 18px}}
 
 
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&display=swap');
-.developer-name{display:inline-flex;align-items:center;gap:7px;font-family:'Orbitron','Arial Black',system-ui,sans-serif!important;font-weight:900!important;letter-spacing:.055em;background:linear-gradient(105deg,#ff3d72 0%,#ffb52e 16%,#f7ff59 30%,#42f59b 45%,#39d9ff 60%,#7977ff 76%,#e65cff 90%,#ff3d72 100%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;animation:developerRainbow 3.8s linear infinite,developerShimmer 1.8s ease-in-out infinite alternate;filter:drop-shadow(0 0 5px rgba(143,115,255,.42))}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=UnifrakturCook:wght@700&display=swap');
+.developer-name{display:inline-flex;align-items:center;gap:7px;font-family:'UnifrakturCook','Old English Text MT',serif!important;font-weight:700!important;letter-spacing:.025em;background:linear-gradient(105deg,#ff3d72 0%,#ffb52e 16%,#f7ff59 30%,#42f59b 45%,#39d9ff 60%,#7977ff 76%,#e65cff 90%,#ff3d72 100%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;animation:developerRainbow 3.8s linear infinite,developerShimmer 1.8s ease-in-out infinite alternate;filter:drop-shadow(0 0 5px rgba(143,115,255,.42))}
 .developer-badge{font:800 8px/1 'Orbitron',system-ui,sans-serif;letter-spacing:.11em;padding:4px 6px;border-radius:5px;color:#fff;background:linear-gradient(100deg,#ff477e,#8a5cff,#26c9ed);-webkit-text-fill-color:#fff;box-shadow:0 0 12px rgba(154,91,255,.38)}
 @keyframes developerRainbow{0%{background-position:0% 50%}100%{background-position:300% 50%}}
 @keyframes developerShimmer{0%{filter:drop-shadow(0 0 3px rgba(255,83,172,.32)) brightness(1)}100%{filter:drop-shadow(0 0 9px rgba(83,218,255,.72)) brightness(1.28)}}
