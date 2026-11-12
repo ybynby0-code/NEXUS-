@@ -22,7 +22,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .server-rail-brand{background:linear-gradient(145deg,#9994ff,#625de0);color:white;font-size:19px;border-radius:16px;box-shadow:0 5px 22px #7770ff35}
 .server-rail-brand span{color:#d9d6ff}
 .server-rail-divider{width:30px;height:1px;background:#34363d;margin:2px 0}
-.server-rail-button{background:transparent;color:#9499a4;border-radius:15px}
+.server-rail-button{position:relative;background:transparent;color:#9499a4;border-radius:15px}
 .server-rail-button:hover,.server-rail-button.active{background:#333347;color:#fff;border-radius:13px}
 .server-rail-button.active:before{content:'';position:absolute;left:0;width:4px;height:28px;border-radius:0 5px 5px 0;background:#9690ff}
 .server-rail-workspace{border-radius:15px;background:#272932;color:#dfe0ff;font-size:16px}
