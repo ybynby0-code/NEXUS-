@@ -1755,3 +1755,19 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   opacity:.8;transform:scaleX(.72);transform-origin:center;transition:transform .22s,opacity .22s;
 }
 .message-meta .nexus-admin-name:hover:after{transform:scaleX(1);opacity:1}
+
+
+/* NEXUS social layer: DM typing, presence, profile actions and search metadata */
+.dm-composer-wrap{display:flex;flex-direction:column;gap:4px;min-width:0}
+.dm-typing-indicator{min-height:20px;padding:1px 8px 2px;font-size:10px}
+.dm-chat-head>div:nth-child(2) small{display:flex;align-items:center;gap:5px}
+.dm-chat-head>div:nth-child(2) small:has(+button){color:#9ca8bc}
+.profile-online-status{display:inline-flex;align-items:center;gap:7px}
+.profile-online-status i{width:8px;height:8px;border-radius:50%;background:#788395;box-shadow:0 0 0 3px rgba(120,131,149,.12)}
+.profile-online-status.is-online{color:#74e2a1}
+.profile-online-status.is-online i{background:#35d879;box-shadow:0 0 0 3px rgba(53,216,121,.13),0 0 10px rgba(53,216,121,.55)}
+.profile-view-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.profile-view-actions .full-action{margin-top:0}
+.search-result>div:last-child{min-width:0}
+.search-result time{display:block;margin-top:5px;color:#78869d;font-size:10px}
+@media(max-width:600px){.profile-view-actions{grid-template-columns:1fr}.dm-typing-indicator{font-size:9px}}
