@@ -1479,3 +1479,8 @@ body::before{
 .dm-chat-head .dm-ping-button{margin-left:auto}
 .dm-chat-head .dm-ping-button+button{margin-left:0}
 @media(max-width:600px){.group-dm-manage-modal{width:calc(100vw - 16px);padding:15px}.group-dm-manage-actions{flex-wrap:wrap}.group-dm-manage-actions button{flex:1}.group-dm-rename-row .primary-action{padding:8px 10px}.dm-chat-head .dm-ping-button{font-size:9px;padding:7px 8px}}
+
+/* Chat message avatars use the same profile image and frame as the profile editor */
+.message-row > .avatar{display:grid;place-items:center;overflow:visible;flex:0 0 38px;width:38px;height:38px}
+.message-row > .avatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+@media(max-width:760px){.message-row > .avatar{flex-basis:33px;width:33px;height:33px}}
