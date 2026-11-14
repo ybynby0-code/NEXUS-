@@ -83,6 +83,7 @@ function WorkspaceApp() {
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiBusy,setAiBusy] = useState(false);
   const [aiHistory,setAiHistory] = useState<Array<{role:'user'|'assistant';text:string;createdAt:number}>>([]);
+  const [aiHistoryUserId,setAiHistoryUserId] = useState<string|null>(null);
   const [aiAnswer,setAiAnswer] = useState('NEXUS AI 서버 연결이 준비되어 있습니다. 제공자 키가 등록되면 실제 답변을 생성합니다.');
   const [translatedMessages,setTranslatedMessages] = useState<Record<string,string>>({});
   const [translatingMessageIds,setTranslatingMessageIds] = useState<string[]>([]);
@@ -944,13 +945,15 @@ function WorkspaceApp() {
     void translateMessage(latest);
   },[messages,autoTranslateMessages,currentUser?.id,translatedMessages]);
   useEffect(()=>{
-    if(!currentUser?.id)return;
-    try{const saved=localStorage.getItem('nexus-ai-history:'+currentUser.id);setAiHistory(saved?JSON.parse(saved):[]);}catch{setAiHistory([]);}
+    if(!currentUser?.id){setAiHistoryUserId(null);setAiHistory([]);return;}
+    setAiHistoryUserId(null);
+    try{const saved=localStorage.getItem('nexus-ai-history:'+currentUser.id);const parsed=saved?JSON.parse(saved):[];setAiHistory(Array.isArray(parsed)?parsed.filter((x:any)=>x&&['user','assistant'].includes(x.role)&&typeof x.text==='string').slice(-40):[]);}catch{setAiHistory([]);}
+    setAiHistoryUserId(currentUser.id);
   },[currentUser?.id]);
   useEffect(()=>{
-    if(!currentUser?.id)return;
+    if(!currentUser?.id||aiHistoryUserId!==currentUser.id)return;
     try{localStorage.setItem('nexus-ai-history:'+currentUser.id,JSON.stringify(aiHistory.slice(-40)));}catch{}
-  },[aiHistory,currentUser?.id]);
+  },[aiHistory,currentUser?.id,aiHistoryUserId]);
   const askAi=async()=>{
     const prompt=aiPrompt.trim();if(!prompt||!supabase||aiBusy)return;
     const userTurn={role:'user' as const,text:prompt,createdAt:Date.now()};
