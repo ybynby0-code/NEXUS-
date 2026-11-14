@@ -996,6 +996,7 @@ body{background:var(--nx-bg);color:#f2f3f5}
 
 
 /* Channel message interactions */
+.thread-panel{position:relative;z-index:2;margin:0 18px 12px;padding:14px;border:1px solid rgba(143,128,255,.25);border-radius:16px;background:rgba(18,22,38,.96);box-shadow:0 12px 36px rgba(0,0,0,.2)}.thread-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.thread-panel-head>div{display:grid;gap:3px}.thread-panel-head strong{font-size:14px}.thread-root,.thread-reply{padding:10px 12px;border-radius:11px;background:rgba(255,255,255,.045);margin-top:8px}.thread-root p,.thread-reply p{margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}.thread-root small,.thread-reply small{color:#9298aa;font-size:11px}.thread-replies{max-height:220px;overflow:auto;margin:8px 0}.thread-empty{padding:16px;text-align:center;color:#9298aa;font-size:12px}.thread-reply-action{width:100%;margin-top:6px}@media(max-width:760px){.thread-panel{margin:0 10px 10px;padding:11px}.thread-replies{max-height:180px}}
 .message-actions{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:8px;opacity:.78}
 .message-actions button{border:1px solid #41434b;background:#2b2d31;color:#b5bac1;border-radius:7px;padding:4px 8px;font-size:10px;min-height:27px}
 .message-actions button:hover,.message-actions button.reaction-active{background:#3b3f79;border-color:#5865f2;color:#fff}
