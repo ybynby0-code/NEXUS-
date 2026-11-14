@@ -969,7 +969,7 @@ function WorkspaceApp() {
       const {data,error}=await supabase.functions.invoke('nexus-ai',{body:{prompt,context,contextTitle}});
       if(error){let message=error.message;try{const detail=await (error as any).context?.clone?.().json();if(detail?.error)message=detail.error;}catch{}throw new Error(message);}
       if(!data?.ok)throw new Error(data?.error||'AI 응답을 받지 못했습니다.');
-      const answer=String(data.text||'');setAiAnswer(answer);setAiHistory(v=>[...v,{role:'assistant',text:answer,createdAt:Date.now()}].slice(-40));
+      const answer=String(data.text||'');setAiAnswer(answer);setAiHistory(v=>[...v,{role:'assistant' as const,text:answer,createdAt:Date.now()}].slice(-40));
     }catch(e:any){
       const message=e?.message||'AI 요청에 실패했습니다.';setAiAnswer('AI 연결 오류: '+message);notify(message);
     }finally{setAiBusy(false);}
