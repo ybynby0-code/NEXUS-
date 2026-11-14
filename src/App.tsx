@@ -82,6 +82,7 @@ function WorkspaceApp() {
   const themeImageInput=useRef<HTMLInputElement>(null);
   const [aiPrompt,setAiPrompt] = useState('');
   const [aiBusy,setAiBusy] = useState(false);
+  const [aiHistory,setAiHistory] = useState<Array<{role:'user'|'assistant';text:string;createdAt:number}>>([]);
   const [aiAnswer,setAiAnswer] = useState('NEXUS AI 서버 연결이 준비되어 있습니다. 제공자 키가 등록되면 실제 답변을 생성합니다.');
   const [translatedMessages,setTranslatedMessages] = useState<Record<string,string>>({});
   const [translatingMessageIds,setTranslatingMessageIds] = useState<string[]>([]);
@@ -942,28 +943,37 @@ function WorkspaceApp() {
     autoTranslatedRef.current.add(latest.id);
     void translateMessage(latest);
   },[messages,autoTranslateMessages,currentUser?.id,translatedMessages]);
+  useEffect(()=>{
+    if(!currentUser?.id)return;
+    try{const saved=localStorage.getItem('nexus-ai-history:'+currentUser.id);setAiHistory(saved?JSON.parse(saved):[]);}catch{setAiHistory([]);}
+  },[currentUser?.id]);
+  useEffect(()=>{
+    if(!currentUser?.id)return;
+    try{localStorage.setItem('nexus-ai-history:'+currentUser.id,JSON.stringify(aiHistory.slice(-40)));}catch{}
+  },[aiHistory,currentUser?.id]);
   const askAi=async()=>{
     const prompt=aiPrompt.trim();if(!prompt||!supabase||aiBusy)return;
-    setAiBusy(true);
+    const userTurn={role:'user' as const,text:prompt,createdAt:Date.now()};
+    const previousHistory=aiHistory.slice(-10);
+    setAiHistory(v=>[...v,userTurn].slice(-40));setAiPrompt('');setAiBusy(true);
     try{
-      const context=section==='dms'&&activeDm
+      const chatContext=section==='dms'&&activeDm
         ?dmMessages.slice(-12).map(m=>({author:m.sender_id===currentUser?.id?'나':activeDm.person?.display_name||'상대방',content:String(m.content||'').slice(0,900)}))
         :messages.slice(-12).map(m=>({author:m.name,content:String(m.text||'').slice(0,900)}));
+      const historyContext=previousHistory.map(turn=>({author:turn.role==='user'?'이전 AI 요청':'NEXUS AI 이전 답변',content:turn.text.slice(0,900)}));
+      const context=[...chatContext,...historyContext].slice(-12);
       const contextTitle=section==='dms'?'현재 개인 대화':section==='messages'?'#'+activeChannel+' 채널 대화':'최근 NEXUS 대화';
       const {data,error}=await supabase.functions.invoke('nexus-ai',{body:{prompt,context,contextTitle}});
-      if(error){
-        let message=error.message;
-        try{const detail=await (error as any).context?.clone?.().json();if(detail?.error)message=detail.error;}catch{}
-        throw new Error(message);
-      }
+      if(error){let message=error.message;try{const detail=await (error as any).context?.clone?.().json();if(detail?.error)message=detail.error;}catch{}throw new Error(message);}
       if(!data?.ok)throw new Error(data?.error||'AI 응답을 받지 못했습니다.');
-      setAiAnswer(data.text);setAiPrompt('');
+      const answer=String(data.text||'');setAiAnswer(answer);setAiHistory(v=>[...v,{role:'assistant',text:answer,createdAt:Date.now()}].slice(-40));
     }catch(e:any){
-      const message=e?.message||'AI 요청에 실패했습니다.';
-      setAiAnswer('AI 연결 오류: '+message);
-      notify(message);
+      const message=e?.message||'AI 요청에 실패했습니다.';setAiAnswer('AI 연결 오류: '+message);notify(message);
     }finally{setAiBusy(false);}
   };
+  const clearAiHistory=()=>{setAiHistory([]);setAiAnswer('대화 기록을 지웠습니다. 새로운 질문을 입력해 주세요.');if(currentUser?.id)localStorage.removeItem('nexus-ai-history:'+currentUser.id);};
+  const copyAiText=async(text:string)=>{try{await navigator.clipboard.writeText(text);notify('AI 답변을 복사했습니다.');}catch{notify('복사할 수 없습니다. 브라우저 권한을 확인해 주세요.');}};
+
   const activeChannelRow=channelRows.find((row:any)=>row.name===activeChannel);
   const canManageChannels=members.some((member:any)=>member.user_id===currentUser?.id&&['owner','admin'].includes(member.role))||workspaceRoles.some(role=>!!role.permissions?.manage_channels&&members.some((member:any)=>member.user_id===currentUser?.id&&(member.role_ids||[]).includes(role.id)));
   const channelPermissionOptions=[{key:'view_channel',label:'채널 보기',help:'채널 목록과 내용을 볼 수 있습니다.'},{key:'read_messages',label:'메시지 읽기',help:'채널의 메시지를 읽을 수 있습니다.'},{key:'send_messages',label:'메시지 보내기',help:'새 메시지를 작성할 수 있습니다.'},{key:'attach_files',label:'파일 첨부',help:'메시지에 파일을 첨부할 수 있습니다.'},{key:'embed_links',label:'링크 미리보기',help:'링크 미리보기를 표시할 수 있습니다.'},{key:'manage_messages',label:'메시지 관리',help:'다른 멤버의 메시지를 관리할 수 있습니다.'},{key:'connect',label:'음성 채널 연결',help:'음성 채널에 연결할 수 있습니다.'},{key:'speak',label:'음성 발언',help:'음성 채널에서 말할 수 있습니다.'}];
@@ -1284,7 +1294,7 @@ function WorkspaceApp() {
         </section>
         <aside className={`ai-panel ${mobilePanel==='ai'?'mobile-ai-open':''}`}>
           <div className="ai-header"><div className="ai-symbol"><Sparkles size={17}/></div><div><strong>NEXUS AI</strong><small>통합 AI 어시스턴트</small></div><button className="icon-button mobile-close" onClick={()=>setMobilePanel('none')} aria-label="닫기"><X size={17}/></button><span className="beta-pill">BETA</span></div>
-          <div className="ai-content"><div className="ai-greeting"><div className="ai-orb"><Bot size={25}/></div><h2>무엇을 도와드릴까요?</h2><p>대화, 일정, 문서와 연결되는<br/>하나의 AI 작업 공간을 준비하고 있습니다.</p></div><div className="suggestion-title">이렇게 시작해 보세요</div><button className="suggestion" onClick={()=>setAiPrompt('오늘 대화 내용을 요약해 줘')}><MessageCircle size={16}/><span>오늘 대화 요약하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('팀 회의 안건을 작성해 줘')}><CalendarDays size={16}/><span>회의 안건 작성하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('NEXUS 개발 작업을 정리해 줘')}><ShieldCheck size={16}/><span>프로젝트 작업 정리하기</span><span>↗</span></button><div className="ai-response">{aiAnswer}</div></div>
+          <div className="ai-content"><div className="ai-greeting"><div className="ai-orb"><Bot size={25}/></div><h2>무엇을 도와드릴까요?</h2><p>대화, 일정, 문서와 연결되는<br/>하나의 AI 작업 공간을 준비하고 있습니다.</p></div><div className="suggestion-title">이렇게 시작해 보세요</div><button className="suggestion" onClick={()=>setAiPrompt('오늘 대화 내용을 요약해 줘')}><MessageCircle size={16}/><span>오늘 대화 요약하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('팀 회의 안건을 작성해 줘')}><CalendarDays size={16}/><span>회의 안건 작성하기</span><span>↗</span></button><button className="suggestion" onClick={()=>setAiPrompt('NEXUS 개발 작업을 정리해 줘')}><ShieldCheck size={16}/><span>프로젝트 작업 정리하기</span><span>↗</span></button><div className="ai-history-toolbar"><span>{aiHistory.length?aiHistory.length+'개 메시지':'새 대화'}</span><button onClick={clearAiHistory} disabled={!aiHistory.length}>기록 지우기</button></div><div className="ai-history-list">{aiHistory.map((turn,index)=><article className={'ai-turn '+(turn.role==='user'?'ai-turn-user':'ai-turn-assistant')} key={turn.createdAt+'-'+index}><small>{turn.role==='user'?'나':'NEXUS AI'}</small><p>{turn.text}</p>{turn.role==='assistant'&&<button className="ai-copy-button" onClick={()=>copyAiText(turn.text)}><Copy size={13}/> 복사</button>}</article>)}{!aiHistory.length&&<div className="ai-response">{aiAnswer}</div>}{aiBusy&&<div className="ai-thinking"><span></span><span></span><span></span> NEXUS AI가 답변을 작성하고 있습니다.</div>}</div></div>
           <div className="ai-input-wrap"><textarea value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="NEXUS AI에게 요청하기..." rows={2}/><button onClick={askAi} aria-label="AI 요청 전송" disabled={aiBusy||!aiPrompt.trim()}><Send size={16}/></button><small>{aiBusy?'AI 답변 생성 중...':'서버에서 OpenAI 호환 AI API 호출 · 키는 브라우저에 노출되지 않습니다.'}</small></div>
         </aside>
       </div>:section==='dms'?<section className="feature-page">
